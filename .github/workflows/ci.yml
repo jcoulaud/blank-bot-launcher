@@ -1,0 +1,33 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - run: npm ci
+
+      - name: TypeScript (src)
+        run: npx tsc --noEmit
+
+      - name: TypeScript (tests + scripts)
+        run: npx tsc --noEmit --project tsconfig.test.json
+
+      - name: Biome (lint + format)
+        run: npx biome check src test
+
+      - name: Tests
+        run: npm test

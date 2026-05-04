@@ -1,6 +1,8 @@
 import { ETwitterStreamEvent, type TweetV2SingleStreamResult, TwitterApi } from "twitter-api-v2";
 import type { Accounts } from "../config.js";
 import { getLogger } from "../logger.js";
+import { errMsg } from "../util/errors.js";
+import { ALLOWED_IMAGE_HOSTS } from "../util/x-hosts.js";
 import type { Tweet, TweetHandler, TweetMedia, TweetSource } from "./tweet-source.js";
 
 const X_RULE_MAX_BYTES = 1024;
@@ -10,15 +12,21 @@ const log = getLogger({ pipeline_stage: "stream" });
 export type FilteredStreamOptions = {
   bearerToken: string;
   accounts: Accounts;
-  /** ms epoch — tweets older than this are dropped on startup */
+  /** Unix timestamp in milliseconds. Older tweets are dropped on startup. */
   ignoreBefore: number;
+  /**
+   * Called when `handler(tweet)` rejects after the pipeline's internal
+   * try/catches. Lets the caller record the tweet as skipped so the bot
+   * doesn't reprocess it after a restart.
+   */
+  onPipelineError?: (tweet: Tweet, err: unknown) => void;
 };
 
 export class FilteredStreamSource implements TweetSource {
   private client: TwitterApi;
   private stream?: Awaited<ReturnType<TwitterApi["v2"]["searchStream"]>>;
   private stopping = false;
-  // True when other (non-bot) rules exist on the project — we then post-filter
+  // True when other rules exist on the project; in that case we post-filter
   // delivered tweets to only our followed handles.
   private handleOnlyOurAccounts = false;
   private followedHandles: Set<string>;
@@ -87,39 +95,49 @@ export class FilteredStreamSource implements TweetSource {
 
     this.stream.on(ETwitterStreamEvent.Data, async (payload) => {
       if (this.stopping) return;
+      let tweet: Tweet | null;
       try {
-        const tweet = parseStreamPayload(payload);
-        if (!tweet) return;
-        if (tweet.createdAt.getTime() < this.options.ignoreBefore) {
-          log.debug({ tweet_id: tweet.id }, "skipping stale tweet");
-          return;
-        }
-        // If other rules co-exist on the project, the stream may deliver tweets
-        // matched by them (not us). Post-filter to our followed handles.
-        if (
-          this.handleOnlyOurAccounts &&
-          !this.followedHandles.has(tweet.authorHandle.toLowerCase())
-        ) {
-          log.debug(
-            { tweet_id: tweet.id, author: tweet.authorHandle },
-            "not in our followed list (other rule matched)",
+        tweet = parseStreamPayload(payload);
+      } catch (err) {
+        log.error({ err: errMsg(err) }, "stream parser threw");
+        return;
+      }
+      if (!tweet) {
+        // Distinguish empty heartbeats (no `data`) from genuinely malformed
+        // payloads. Silent drops are how the bot stops processing if X
+        // changes their schema.
+        if ((payload as { data?: unknown })?.data) {
+          log.warn(
+            { preview: JSON.stringify(payload).slice(0, 200) },
+            "stream payload has data but parser rejected it",
           );
-          return;
+        } else {
+          log.debug("stream heartbeat / non-tweet payload");
         }
-        if (tweet.isRetweet && !tweet.isQuoteTweet) {
-          log.debug({ tweet_id: tweet.id }, "skipping pure retweet");
-          return;
-        }
-        if (tweet.isReply) {
-          log.debug({ tweet_id: tweet.id }, "skipping reply");
-          return;
-        }
+        return;
+      }
+      const decision = shouldHandleTweet(tweet, {
+        ignoreBefore: this.options.ignoreBefore,
+        ...(this.handleOnlyOurAccounts ? { followedHandles: this.followedHandles } : {}),
+      });
+      if (!decision.handle) {
+        log.debug(
+          { tweet_id: tweet.id, author: tweet.authorHandle, reason: decision.reason },
+          "skipping tweet",
+        );
+        return;
+      }
+      try {
         await handler(tweet);
       } catch (err) {
+        // The pipeline catches per-stage errors and records them itself.
+        // Reaching here means a bug or a DB write failure. Record the tweet
+        // as `skipped_error` so the bot doesn't loop on it across restarts.
         log.error(
-          { err: err instanceof Error ? err.message : String(err) },
-          "error processing tweet",
+          { err: errMsg(err), tweet_id: tweet.id, author_handle: tweet.authorHandle },
+          "pipeline handler threw (recording as skipped_error)",
         );
+        this.options.onPipelineError?.(tweet, err);
       }
     });
 
@@ -162,7 +180,54 @@ export function buildRule(accounts: Accounts): string {
   return rule;
 }
 
-export function parseStreamPayload(payload: TweetV2SingleStreamResult): Tweet | null {
+export type ShouldHandleOptions = {
+  /** Unix timestamp in milliseconds. Tweets created before this are dropped. */
+  ignoreBefore: number;
+  /**
+   * Lowercased handles we are following. When set, tweets from other handles
+   * are dropped (used when other rules share the X project). Leave undefined
+   * when only our rule is installed and post-filtering isn't needed.
+   */
+  followedHandles?: ReadonlySet<string>;
+};
+
+export type ShouldHandleDecision =
+  | { handle: true }
+  | { handle: false; reason: "stale" | "not_followed" | "retweet" | "reply" };
+
+/**
+ * Pure post-parse filter. Mirrors the rejection rules the stream handler
+ * applies to a parsed tweet, in order:
+ *   stale -> not_followed -> retweet -> reply.
+ */
+export function shouldHandleTweet(tweet: Tweet, opts: ShouldHandleOptions): ShouldHandleDecision {
+  if (tweet.createdAt.getTime() < opts.ignoreBefore) {
+    return { handle: false, reason: "stale" };
+  }
+  if (opts.followedHandles && !opts.followedHandles.has(tweet.authorHandle.toLowerCase())) {
+    return { handle: false, reason: "not_followed" };
+  }
+  if (tweet.isRetweet && !tweet.isQuoteTweet) {
+    return { handle: false, reason: "retweet" };
+  }
+  if (tweet.isReply) {
+    return { handle: false, reason: "reply" };
+  }
+  return { handle: true };
+}
+
+/**
+ * Accepts both the streaming payload (`TweetV2SingleStreamResult`) and the
+ * `client.v2.singleTweet()` response: both expose `data` and `includes` with
+ * the same shape, so the parser is shared. Typed as the structural subset
+ * we actually read so callers don't have to cast through `as never`.
+ */
+export type StreamPayloadLike = {
+  data: TweetV2SingleStreamResult["data"];
+  includes?: TweetV2SingleStreamResult["includes"] | undefined;
+};
+
+export function parseStreamPayload(payload: StreamPayloadLike): Tweet | null {
   const data = payload.data;
   if (!data?.id || !data.author_id || !data.created_at) return null;
 
@@ -177,14 +242,11 @@ export function parseStreamPayload(payload: TweetV2SingleStreamResult): Tweet | 
 
   const mediaKeys = data.attachments?.media_keys ?? [];
   const images: TweetMedia[] = [];
-  let videoUrl: string | undefined;
   for (const key of mediaKeys) {
     const m = includes?.media?.find((mm) => mm.media_key === key);
     if (!m) continue;
-    if (m.type === "photo" && m.url) {
-      images.push({ url: m.url, mimeType: guessMimeFromUrl(m.url) });
-    } else if (m.type === "video" || m.type === "animated_gif") {
-      videoUrl = m.preview_image_url;
+    if (m.type === "photo" && m.url && isAllowedImageUrl(m.url)) {
+      images.push({ url: m.url });
     }
   }
 
@@ -219,7 +281,6 @@ export function parseStreamPayload(payload: TweetV2SingleStreamResult): Tweet | 
     isRetweet,
     isQuoteTweet,
   };
-  if (videoUrl) tweet.videoUrl = videoUrl;
   if (quotedTweet) tweet.quotedTweet = quotedTweet;
   return tweet;
 }
@@ -232,12 +293,12 @@ export function parseStreamPayload(payload: TweetV2SingleStreamResult): Tweet | 
 class XStreamAccessError extends Error {
   override readonly name = "XStreamAccessError";
   constructor(cause: unknown) {
-    const causeMsg = cause instanceof Error ? cause.message : String(cause);
+    const causeMsg = errMsg(cause);
     const code = extractStatusCode(cause);
     const tip = diagnoseXError(code);
     super(
       `Failed to start X Filtered Stream (${causeMsg}).\n${tip}\n` +
-        `Verify at https://developer.x.com → your project → Keys & Tokens / Subscriptions.`,
+        `Verify at https://developer.x.com > your project > Keys & Tokens / Subscriptions.`,
     );
   }
 }
@@ -251,26 +312,28 @@ function extractStatusCode(err: unknown): number | undefined {
   return undefined;
 }
 
-function diagnoseXError(code: number | undefined): string {
+export function diagnoseXError(code: number | undefined): string {
   if (code === 401 || code === 403) {
-    return "Auth failure: Bearer Token is wrong, or your X app/project does not have Filtered Stream access. Most common: free tier excludes Filtered Stream — attach billing for pay-per-use, or upgrade plan.";
+    return "Auth failure: Bearer Token is wrong, or your X app/project does not have Filtered Stream access. Most common: free tier excludes Filtered Stream; attach billing for pay-per-use, or upgrade plan.";
   }
   if (code === 429) {
     return "Rate-limited by X. Wait a few minutes and retry, or check the Subscriptions tab for your monthly cap.";
   }
   if (code === 503) {
-    return "X returned 503. Either a transient outage (retry in a few minutes) OR your project lacks Filtered Stream entitlement (the API returns 503 instead of 403 in this case). Check developer.x.com → Subscriptions: pay-per-use needs billing attached; legacy Free tier does not include Filtered Stream.";
+    return "X returned 503. Either a transient outage (retry in a few minutes) OR your project lacks Filtered Stream entitlement (the API returns 503 instead of 403 in this case). Check developer.x.com > Subscriptions: pay-per-use needs billing attached; legacy Free tier does not include Filtered Stream.";
   }
   if (code === 404) {
-    return "X returned 404 — usually means Filtered Stream is not enabled on this project.";
+    return "X returned 404; usually means Filtered Stream is not enabled on this project.";
   }
   return "Unexpected error from X. Check developer.x.com Subscriptions and that the bearer token belongs to a project with Filtered Stream enabled.";
 }
 
-function guessMimeFromUrl(url: string): string {
-  const lower = url.toLowerCase();
-  if (lower.endsWith(".png")) return "image/png";
-  if (lower.endsWith(".gif")) return "image/gif";
-  if (lower.endsWith(".webp")) return "image/webp";
-  return "image/jpeg";
+function isAllowedImageUrl(url: string): boolean {
+  try {
+    const u = new URL(url);
+    if (u.protocol !== "https:") return false;
+    return ALLOWED_IMAGE_HOSTS.has(u.hostname);
+  } catch {
+    return false;
+  }
 }

@@ -1,69 +1,208 @@
 # blank-bot
 
-Open-source reference bot that launches Solana memecoins from influencer tweets via the [blank.build](https://blank.build) SDK.
+`blank-bot` is a TypeScript reference bot for the
+[`@blankdotbuild/sdk`](https://www.npmjs.com/package/@blankdotbuild/sdk).
+It follows X accounts, scores new tweets, builds token metadata and an image,
+uploads both to IPFS through Pinata, then calls `blank.launch.create()`.
 
-A working example of the Blank token-launch SDK end-to-end: real-time X (Twitter) ingestion, AI-driven memeability classification, AI-generated token metadata + image, IPFS upload, and a fully autonomous `blank.launch.create()` call — all with hard safety caps.
+This is example code. Live mode spends real SOL from a hot wallet. Use a new
+wallet, fund it lightly, and run in dry mode first.
 
-This is a **reference implementation**, not a profitable trading bot. It optimizes for clarity, forkability, and showing every integration point of the Blank SDK.
+## What you learn
 
-## What it does
+- How to build a Blank SDK client and wallet adapter.
+- How to call `blank.launch.create()` with an idempotency key.
+- How to prepare a short `ipfs://...` metadata URI for Blank.
+- How to keep SDK errors log-safe when signed transactions are involved.
+- How to put safety caps around an automated launch loop.
 
-1. Connects to the X API v2 Filtered Stream and watches a configured list of accounts (default: Elon Musk, Sam Altman, Sario, Vitalik, Anatoly, CZ).
-2. For every new tweet, runs a two-stage AI pipeline (Gemini 2.5 Flash):
-   - **Stage 1 — Classifier:** is this tweet memeable? Outputs a confidence score.
-   - **Stage 2 — Metadata generator:** if confidence ≥ threshold, generate a token name, ticker, description, and image strategy (reuse the tweet image, remix it, or generate a new one with Nano Banana).
-3. Uploads the image and metadata JSON to IPFS via Pinata.
-4. Runs a safety gate (per-launch SOL cap, daily SOL cap, daily launch count, per-author cooldown, wallet balance sanity).
-5. Calls `blank.launch.create()` with the IPFS metadata URI.
-6. Persists the full audit trail to SQLite. Optionally pings Telegram and serves a tiny status dashboard at `localhost:3000`.
+## How the bot works
+
+```mermaid
+flowchart TD
+  A["X Filtered Stream"] --> B["runPipeline(tweet)"]
+  B --> C["Dedup in SQLite"]
+  C --> D["Classify tweet"]
+  D --> E["Generate token metadata"]
+  E --> F["Prepare image"]
+  F --> G["Check caps, cooldown, balance"]
+  G --> H["Reserve daily-cap slot"]
+  H --> I["Upload image and metadata to IPFS"]
+  I --> J["blank.launch.create()"]
+  J --> K["Commit launch row"]
+```
+
+Every terminal result is recorded in SQLite as a decision: `launched`,
+`dry_run`, `skipped_low_score`, `skipped_validation`, `skipped_safety`, or
+`skipped_error`. That makes restarts boring. A tweet that was already handled
+does not get handled again unless you run a replay with `--force`.
 
 ## Quickstart
 
 ```bash
-git clone <this-repo>
-cd blank-bot
+git clone <your-fork-url>
+cd blank-bot-launcher
 npm install
-cp .env.example .env       # fill in keys
+cp .env.example .env
 cp accounts.example.yaml accounts.yaml
-npm run check-config       # validate env + caps + wallet balance
-npm run dev -- --dry-run   # full pipeline, skips the SDK call
+npm run check-config
+npm run dev -- --dry-run
+npm run backtest
 ```
 
-The bot uses [`@blankdotbuild/sdk`](https://www.npmjs.com/package/@blankdotbuild/sdk) (pinned in `package.json`). `npm start` and the `blank-bot` binary both run the TypeScript source via `tsx` so the SDK's ESM imports resolve correctly.
+Fill in `.env` before running `check-config`. Dry mode runs the full pipeline
+and skips only the SDK launch call. `check-config` exits non-zero if the
+wallet balance is below `MAX_SOL_PER_LAUNCH`.
 
-When you're ready to go live, drop `--dry-run`. Start small: `MAX_SOL_PER_LAUNCH=0.001` and `MAX_LAUNCHES_PER_DAY=1` for the first day.
+When you are ready to try live mode, remove `--dry-run`.
 
-## Architecture
+## Configuration
 
-See [docs/plans/2026-05-02-blank-bot-design.md](./docs/plans/2026-05-02-blank-bot-design.md) for the full architecture, locked decisions with rationale, and component-by-component spec.
+The bot reads environment variables from `.env` and followed accounts from
+`accounts.yaml`.
 
-## Safety
+Required services:
 
-The bot signs Solana transactions on a hot wallet. Three things keep blast radius bounded:
+- Blank API key
+- Solana RPC endpoint
+- X API bearer token with Filtered Stream access
+- Google AI Studio API key for Gemini
+- Pinata JWT
 
-- **Hard caps in code** — `MAX_SOL_PER_LAUNCH`, `MAX_LAUNCHES_PER_DAY`, `MAX_SOL_PER_DAY`. The bot won't start if these are inconsistent with each other.
-- **Wallet balance warning** — startup banner warns if `WARN_IF_BALANCE_ABOVE_SOL` is exceeded ("this is too much money for a hot wallet").
-- **Idempotency** — every launch uses an idempotency key derived from the source tweet ID; Blank dedupes retries within 24h.
+Use `.env.example` and `accounts.example.yaml` as templates. Do not commit
+`.env`, `accounts.yaml`, `data/`, or generated reports.
 
-**Generate a fresh keypair, fund with only what you can afford to lose, never reuse with your main wallet.**
+## Commands
 
-## Customization
+```bash
+npm run dev -- --dry-run              # local run without launching
+npm run start                         # live run
+npm run backtest                      # dry-run recent tweets from followed accounts
+npm run backtest -- --backtest-limit 25
+npm run check-config                  # validate env, accounts, caps, and wallet balance
+npm run build                         # TypeScript check for src
+npm run check                         # TypeScript + Biome for src, tests, and scripts
+npm test                              # unit tests
+npm run reset-today                   # show daily-counter drift after a hard crash
+npm run reset-today -- --apply        # repair today's daily counter
+```
 
-The bot is built around two seams:
+The project runs TypeScript through `tsx`, so local use does not require a
+separate compile step.
 
-- **`TweetSource` interface** — default is X Filtered Stream. Implement the interface to plug in Nitter, a third-party API, or a webhook.
-- **Vercel AI SDK `LanguageModel`** — default is Gemini 2.5 Flash. Swap one import + one line to use OpenAI, Anthropic, OpenRouter, Groq, or local Ollama.
+## Backtesting
 
-Caps, threshold, and cooldown are all environment variables (see `.env.example`).
+`npm run backtest` resolves the handles in `accounts.yaml`, fetches the last
+50 eligible tweets per account, merges them oldest-first, and runs the
+pipeline in dry mode.
 
-## Image rights footnote
+Backtests write a fresh SQLite DB and JSON report under `./data/backtests/` by
+default. They do not mark tweets as seen in the live bot DB.
 
-The bot reuses tweet media when the AI decides it's the best image strategy. That's fair-use-ish for memes but not legal advice. Don't use this with copyrighted content you don't have rights to. Image-rights enforcement is the operator's responsibility.
+```bash
+npm run backtest -- --backtest-limit 100
+npm run backtest -- --backtest-db ./data/my-backtest.db
+npm run backtest -- --backtest-report ./data/backtests/latest.json
+```
+
+The report includes the tweet, classifier result, token metadata, prepared
+image summary, and final decision for each processed tweet.
+
+## Safety notes
+
+This bot signs transactions with a hot wallet. Treat that wallet as
+disposable.
+
+- Generate a new keypair for the bot.
+- Fund it with only what you are willing to spend.
+- Keep `MAX_SOL_PER_LAUNCH`, `MAX_LAUNCHES_PER_DAY`, and `MAX_SOL_PER_DAY`
+  tight.
+- Set `WARN_IF_BALANCE_ABOVE_SOL` below any balance you would be upset to
+  lose.
+- Run `--dry-run` first and inspect the SQLite records before going live.
+- The local dashboard binds to `127.0.0.1` only.
+
+## Crash recovery
+
+The pipeline reserves a daily-cap slot before the SDK launch and commits the
+launch row only after the SDK confirms. If the process is killed between those
+two steps, the daily counter can sit ahead of the launches table. The bot will
+then under-launch for the rest of that UTC day.
+
+After a hard crash, run:
+
+```bash
+npm run reset-today
+npm run reset-today -- --apply
+```
+
+The script only touches today's UTC counter.
+
+## Project layout
+
+```text
+src/
+  brain/       tweet classifier, metadata generator, image preparation
+  safety/      caps, cooldown, balance, and RPC reachability checks
+  launcher/    Blank SDK and Pinata integration
+  sources/     X stream, historical timeline, and mock sources
+  store/       SQLite persistence
+  dashboard/   optional loopback status page
+  pipeline.ts  one tweet through every launch stage
+  cli.ts       flag parsing and keypair loading
+  index.ts     bootstrap, shutdown, source selection, dashboard wiring
+```
+
+The core SDK call is in `src/launcher/blank-launcher.ts`. The full launch flow
+is in `src/pipeline.ts`.
+
+## Change the LLM provider
+
+The classifier and metadata generator both accept a Vercel AI SDK
+[`LanguageModel`](https://ai-sdk.dev/docs/foundations/providers-and-models).
+Swap providers in `src/index.ts`:
+
+```ts
+import { anthropic } from '@ai-sdk/anthropic';
+
+const llmModel = anthropic('claude-sonnet-4-6');
+```
+
+Image generation in `src/brain/image.ts` calls Gemini's REST API directly
+because the AI SDK does not expose image output in the same path used here.
+Keep image generation on Gemini, or replace `callGeminiImage()` with your own
+provider call.
+
+## Change the tweet source
+
+`src/sources/tweet-source.ts` defines the source interface:
+
+```ts
+export interface TweetSource {
+  start(handler: TweetHandler): Promise<void>;
+  stop(): Promise<void>;
+}
+```
+
+Add a source that maps your input to the `Tweet` shape, then instantiate it in
+`src/index.ts`. The pipeline does not care whether the tweet came from X,
+Discord, a queue, or a test fixture.
+
+## Change the image policy
+
+The metadata generator returns `reuse`, `remix`, or `generate`. For a simple
+policy change, edit the rules in `src/brain/prompts.ts`. For a hard override,
+set `metadata.imageStrategy` inside `src/pipeline.ts` after metadata
+generation.
+
+## Image rights
+
+The bot can reuse images attached to tweets. The code cannot decide whether
+you have the right to use an image. Follow accounts and media you are allowed
+to use.
 
 ## Contributing
 
-Issues and PRs welcome. Keep the scope tight — this is a reference example, not a feature-rich product.
-
-## License
-
-MIT
+Issues and PRs are welcome. Keep changes focused. This repo is meant to stay
+small enough that someone can read it and understand how the Blank SDK launch
+path works.

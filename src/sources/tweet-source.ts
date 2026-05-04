@@ -1,6 +1,5 @@
 export type TweetMedia = {
   url: string;
-  mimeType: string; // "image/jpeg" | "image/png" | "video/mp4" | "image/gif" | ...
 };
 
 export type Tweet = {
@@ -10,7 +9,6 @@ export type Tweet = {
   text: string;
   createdAt: Date;
   images: TweetMedia[];
-  videoUrl?: string;
   isReply: boolean;
   isRetweet: boolean;
   isQuoteTweet: boolean;

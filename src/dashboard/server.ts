@@ -1,10 +1,23 @@
+import { createHash } from "node:crypto";
 import type { Connection, Keypair } from "@solana/web3.js";
 import { LAMPORTS_PER_SOL } from "@solana/web3.js";
-import express, { type ErrorRequestHandler, type Request, type Response } from "express";
+import express, {
+  type ErrorRequestHandler,
+  type NextFunction,
+  type Request,
+  type Response,
+} from "express";
 import { getLogger } from "../logger.js";
-import type { LaunchRecord, SeenTweet, Store } from "../store/db.js";
+import type { Store } from "../store/db.js";
+import { errMsg } from "../util/errors.js";
+import { renderError, renderHome, renderLaunch } from "./render.js";
+import { STYLES } from "./styles.js";
 
 const log = getLogger({ pipeline_stage: "dashboard" });
+
+// 30s, deliberately longer than the dashboard's 10s meta refresh so the cache
+// survives multiple reloads instead of expiring just as the next request arrives.
+const BALANCE_TTL_MS = 30_000;
 
 export type DashboardOptions = {
   port: number;
@@ -15,25 +28,86 @@ export type DashboardOptions = {
 
 /**
  * Tiny status dashboard. Express + server-rendered HTML, no JS framework.
- * Per D7, fault-isolated: a render error returns 500 without taking down the bot.
+ * Render failures return 500 without taking down the bot.
+ *
+ * Bound to 127.0.0.1, never exposed beyond loopback. The dashboard surfaces
+ * the wallet pubkey, balance, and full launch history; on a shared network it
+ * would leak operational state to anyone in earshot.
  */
+// Hash of the inlined <style> block in render.ts. The CSP uses this hash
+// instead of 'unsafe-inline' for style-src, so any other inline <style>
+// (e.g. one accidentally introduced by a future template change) is
+// blocked. Must match the exact bytes between `<style>` and `</style>` in
+// render.ts.
+const STYLE_SHA256 = createHash("sha256").update(STYLES).digest("base64");
+
 export function startDashboard(options: DashboardOptions): { close: () => Promise<void> } {
   const app = express();
+  app.disable("x-powered-by");
+
+  app.use((_req: Request, res: Response, next: NextFunction) => {
+    res.setHeader("Cache-Control", "no-store");
+    res.setHeader("X-Content-Type-Options", "nosniff");
+    res.setHeader("X-Frame-Options", "DENY");
+    res.setHeader("Referrer-Policy", "no-referrer");
+    res.setHeader(
+      "Content-Security-Policy",
+      [
+        "default-src 'none'",
+        `style-src 'sha256-${STYLE_SHA256}' https://fonts.googleapis.com`,
+        "font-src https://fonts.gstatic.com",
+        "img-src 'self' data: https://gateway.pinata.cloud",
+        "base-uri 'none'",
+        "form-action 'none'",
+      ].join("; "),
+    );
+    next();
+  });
+
+  let balanceCache: { sol: number; expiresAt: number; fetchedAt: number } | null = null;
+  const getBalanceMemo = async (): Promise<{ sol: number; stale: boolean }> => {
+    const now = Date.now();
+    if (balanceCache && balanceCache.expiresAt > now) {
+      return { sol: balanceCache.sol, stale: false };
+    }
+    try {
+      const lamports = await options.connection.getBalance(options.wallet.publicKey);
+      const sol = lamports / LAMPORTS_PER_SOL;
+      balanceCache = { sol, expiresAt: now + BALANCE_TTL_MS, fetchedAt: now };
+      return { sol, stale: false };
+    } catch (err) {
+      // Fall back to the last known balance so a transient RPC failure doesn't
+      // 500 the dashboard. Mark stale so the UI can flag it.
+      log.warn({ err: errMsg(err) }, "RPC balance fetch failed; serving cached value");
+      if (balanceCache) return { sol: balanceCache.sol, stale: true };
+      throw err;
+    }
+  };
 
   app.get("/", async (_req: Request, res: Response) => {
     const now = Date.now();
-    const counter = options.store.getDailyCounter(now);
+    const counter = options.store.getCommittedDailyCounter(now);
+    // The reserved counter includes in-flight launches that haven't yet
+    // committed (mid-IPFS, mid-launch). The safety gate checks against this
+    // value, so the dashboard surfaces it too: an operator looking at
+    // "1 launch today" should not think they have 2 free slots when one is
+    // already reserved against the daily cap.
+    const reserved = options.store.getDailyCounter(now);
+    const openReservations = Math.max(0, reserved.launches_count - counter.launches_count);
+    const reservedSolPending = Math.max(0, reserved.sol_spent - counter.sol_spent);
     const seen = options.store.recentSeen(50);
     const launches = options.store.recentLaunches(20);
-    const balanceLamports = await options.connection.getBalance(options.wallet.publicKey);
-    const balanceSol = balanceLamports / LAMPORTS_PER_SOL;
+    const balance = await getBalanceMemo();
 
     res.type("html").send(
       renderHome({
         counter,
+        openReservations,
+        reservedSolPending,
         seen,
         launches,
-        balanceSol,
+        balanceSol: balance.sol,
+        balanceStale: balance.stale,
         walletPubkey: options.wallet.publicKey.toBase58(),
       }),
     );
@@ -42,29 +116,43 @@ export function startDashboard(options: DashboardOptions): { close: () => Promis
   app.get("/launches/:mint", (req: Request, res: Response) => {
     const mint = req.params.mint;
     if (typeof mint !== "string" || mint.length === 0) {
-      res.status(400).type("html").send(layout("bad request", "<p>Missing mint parameter.</p>"));
+      res
+        .status(400)
+        .type("html")
+        .send(renderError("bad request", "warn", "Missing mint parameter."));
       return;
     }
     const launch = options.store.getLaunch(mint);
     if (!launch) {
-      res.status(404).type("html").send(layout("not found", "<p>No launch with that mint.</p>"));
+      res
+        .status(404)
+        .type("html")
+        .send(renderError("not found", "tip", "No launch with that mint."));
       return;
     }
     res.type("html").send(renderLaunch(launch));
   });
 
-  // Global Express error middleware (4-arg signature) — fault isolation per D7.
+  // Global Express error middleware keeps dashboard failures out of the bot loop.
   const errorHandler: ErrorRequestHandler = (err, _req, res, _next) => {
-    log.error({ err: err instanceof Error ? err.message : String(err) }, "dashboard handler error");
+    log.error({ err: errMsg(err) }, "dashboard handler error");
     res
       .status(500)
       .type("html")
-      .send(layout("server error", "<p>Dashboard error — see bot logs. Bot is still running.</p>"));
+      .send(
+        renderError(
+          "server error",
+          "warn",
+          "Dashboard error; see bot logs. The bot is still running.",
+        ),
+      );
   };
   app.use(errorHandler);
 
-  const server = app.listen(options.port, () => {
-    log.info({ port: options.port }, "dashboard listening");
+  // Bind explicitly to loopback. Never expose this dashboard on a public
+  // interface. It surfaces wallet pubkey, balance, and full launch history.
+  const server = app.listen(options.port, "127.0.0.1", () => {
+    log.info({ port: options.port }, "dashboard listening on 127.0.0.1");
   });
 
   return {
@@ -73,120 +161,4 @@ export function startDashboard(options: DashboardOptions): { close: () => Promis
         server.close((err) => (err ? reject(err) : resolve()));
       }),
   };
-}
-
-function layout(title: string, body: string): string {
-  return `<!doctype html>
-<html lang="en">
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta http-equiv="refresh" content="10">
-  <title>blank-bot — ${esc(title)}</title>
-  <style>
-    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif; max-width: 900px; margin: 2em auto; padding: 0 1em; color: #222; }
-    h1 { font-size: 1.4em; }
-    h2 { font-size: 1.1em; margin-top: 2em; }
-    table { border-collapse: collapse; width: 100%; }
-    th, td { padding: 6px 10px; border-bottom: 1px solid #eee; text-align: left; font-size: 13px; }
-    th { background: #fafafa; }
-    code { background: #f4f4f4; padding: 1px 4px; border-radius: 3px; font-size: 12px; }
-    .muted { color: #777; }
-    .ok { color: #0a7d28; }
-    .skip { color: #777; }
-    .err { color: #b00020; }
-  </style>
-</head>
-<body>${body}</body>
-</html>`;
-}
-
-function renderHome(args: {
-  counter: { date: string; launches_count: number; sol_spent: number };
-  seen: SeenTweet[];
-  launches: LaunchRecord[];
-  balanceSol: number;
-  walletPubkey: string;
-}): string {
-  const launchesRows = args.launches
-    .map(
-      (l) =>
-        `<tr><td><a href="/launches/${esc(l.mint)}">${esc(l.ticker)}</a></td>` +
-        `<td>${esc(l.name)}</td>` +
-        `<td class="muted">@${esc(l.source_author)}</td>` +
-        `<td class="muted">${formatTime(l.launched_at)}</td>` +
-        `<td>${l.sol_spent.toFixed(4)} SOL</td></tr>`,
-    )
-    .join("");
-
-  const seenRows = args.seen
-    .map(
-      (s) =>
-        `<tr><td class="${decisionClass(s.decision)}">${esc(s.decision)}</td>` +
-        `<td class="muted">@${esc(s.author_handle)}</td>` +
-        `<td>${s.classifier_score?.toFixed(2) ?? "—"}</td>` +
-        `<td class="muted">${formatTime(s.seen_at)}</td>` +
-        `<td>${esc(s.reason ?? "")}</td></tr>`,
-    )
-    .join("");
-
-  return layout(
-    "status",
-    `<h1>blank-bot</h1>
-     <p class="muted">Wallet: <code>${esc(args.walletPubkey)}</code> · Balance: ${args.balanceSol.toFixed(4)} SOL</p>
-     <p>Today (${esc(args.counter.date)}): <strong>${args.counter.launches_count}</strong> launches, <strong>${args.counter.sol_spent.toFixed(4)}</strong> SOL spent.</p>
-
-     <h2>Recent launches</h2>
-     <table><thead><tr><th>Ticker</th><th>Name</th><th>Source</th><th>When</th><th>Cost</th></tr></thead>
-     <tbody>${launchesRows || `<tr><td colspan="5" class="muted">No launches yet.</td></tr>`}</tbody></table>
-
-     <h2>Recent tweets seen</h2>
-     <table><thead><tr><th>Decision</th><th>Author</th><th>Score</th><th>When</th><th>Reason</th></tr></thead>
-     <tbody>${seenRows || `<tr><td colspan="5" class="muted">No tweets yet.</td></tr>`}</tbody></table>`,
-  );
-}
-
-function renderLaunch(l: LaunchRecord): string {
-  return layout(
-    `launch ${l.ticker}`,
-    `<h1>$${esc(l.ticker)} — ${esc(l.name)}</h1>
-     <p class="muted">From <strong>@${esc(l.source_author)}</strong> at ${formatTime(l.launched_at)}</p>
-     <p>Mint: <code>${esc(l.mint)}</code></p>
-     <p>Tx: <code>${esc(l.tx_signature)}</code></p>
-     <p>Cost: ${l.sol_spent.toFixed(6)} SOL</p>
-     <p>Metadata: <code>${esc(l.metadata_uri)}</code></p>
-     <p>Image CID: <code>${esc(l.image_cid)}</code></p>
-     <p>AI reasoning: ${esc(l.ai_reasoning ?? "—")}</p>
-     <p class="muted">Source tweet: <code>${esc(l.source_tweet_id)}</code></p>
-     <p><a href="/">← back</a></p>`,
-  );
-}
-
-function decisionClass(decision: string): string {
-  if (decision === "launched") return "ok";
-  if (decision.startsWith("skipped_error")) return "err";
-  return "skip";
-}
-
-function formatTime(ms: number): string {
-  return new Date(ms).toISOString().replace("T", " ").slice(0, 19);
-}
-
-function esc(s: string): string {
-  return String(s).replace(/[&<>"']/g, (c) => {
-    switch (c) {
-      case "&":
-        return "&amp;";
-      case "<":
-        return "&lt;";
-      case ">":
-        return "&gt;";
-      case '"':
-        return "&quot;";
-      case "'":
-        return "&#39;";
-      default:
-        return c;
-    }
-  });
 }

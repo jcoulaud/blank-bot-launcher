@@ -1,6 +1,8 @@
-import { mkdirSync } from "node:fs";
+import { chmodSync, mkdirSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import Database, { type Database as DB } from "better-sqlite3";
+import { z } from "zod";
+import { FLOAT_EPS_SOL } from "../config.js";
 
 const SCHEMA_SQL = `
 CREATE TABLE IF NOT EXISTS tweets_seen (
@@ -9,7 +11,8 @@ CREATE TABLE IF NOT EXISTS tweets_seen (
   seen_at INTEGER NOT NULL,
   classifier_score REAL,
   decision TEXT NOT NULL,
-  reason TEXT
+  reason TEXT,
+  seen_count INTEGER NOT NULL DEFAULT 1
 );
 CREATE INDEX IF NOT EXISTS idx_tweets_seen_at ON tweets_seen(seen_at DESC);
 
@@ -24,7 +27,7 @@ CREATE TABLE IF NOT EXISTS launches (
   metadata_uri TEXT NOT NULL,
   image_cid TEXT NOT NULL,
   launched_at INTEGER NOT NULL,
-  ai_reasoning TEXT
+  classification_reason TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_launches_author_time ON launches(source_author, launched_at DESC);
 CREATE INDEX IF NOT EXISTS idx_launches_at ON launches(launched_at DESC);
@@ -36,48 +39,93 @@ CREATE TABLE IF NOT EXISTS daily_counters (
 );
 `;
 
-export type Decision =
-  | "launched"
-  | "skipped_low_score"
-  | "skipped_safety"
-  | "skipped_validation"
-  | "skipped_error";
+// Schemas validate every row read from SQLite. This catches schema drift,
+// column reorders, and migration mistakes before they touch launch decisions.
+const DecisionSchema = z.enum([
+  "launched",
+  "skipped_low_score",
+  "skipped_safety",
+  "skipped_validation",
+  "skipped_error",
+  "dry_run",
+]);
 
-export type SeenTweet = {
-  tweet_id: string;
-  author_handle: string;
-  seen_at: number;
-  classifier_score: number | null;
-  decision: Decision;
-  reason: string | null;
-};
+const SeenTweetSchema = z.object({
+  tweet_id: z.string(),
+  author_handle: z.string(),
+  seen_at: z.number(),
+  classifier_score: z.number().nullable(),
+  decision: DecisionSchema,
+  reason: z.string().nullable(),
+  // `seen_count` is managed by recordSeen / commitReservedLaunch (always 1
+  // on first insert, +1 on each upsert) and surfaces in dashboards. Callers
+  // building a SeenTweet to write should leave it unset.
+  seen_count: z.number().int().min(1).default(1),
+});
 
-export type LaunchRecord = {
-  mint: string;
-  ticker: string;
-  name: string;
-  source_tweet_id: string;
-  source_author: string;
-  sol_spent: number;
-  tx_signature: string;
-  metadata_uri: string;
-  image_cid: string;
-  launched_at: number;
-  ai_reasoning: string | null;
-};
+const LaunchRecordSchema = z.object({
+  mint: z.string(),
+  ticker: z.string(),
+  name: z.string(),
+  source_tweet_id: z.string(),
+  source_author: z.string(),
+  sol_spent: z.number(),
+  tx_signature: z.string(),
+  metadata_uri: z.string(),
+  image_cid: z.string(),
+  launched_at: z.number(),
+  classification_reason: z.string().nullable(),
+});
 
-export type DailyCounter = {
+const DailyCounterSchema = z.object({
+  date: z.string(),
+  launches_count: z.number(),
+  sol_spent: z.number(),
+});
+
+export type Decision = z.infer<typeof DecisionSchema>;
+// On read (z.output) seen_count is always present; on write (z.input) it's
+// optional because `.default(1)` fills it in.
+export type SeenTweet = z.output<typeof SeenTweetSchema>;
+export type SeenTweetInput = z.input<typeof SeenTweetSchema>;
+export type LaunchRecord = z.infer<typeof LaunchRecordSchema>;
+export type DailyCounter = z.infer<typeof DailyCounterSchema>;
+export type LaunchReservation = {
   date: string;
-  launches_count: number;
-  sol_spent: number;
+  plannedSpendSol: number;
+  counter: DailyCounter;
 };
+
+function parseRow<T>(schema: z.ZodType<T>, row: unknown): T {
+  const result = schema.safeParse(row);
+  if (!result.success) {
+    throw new Error(`DB row failed schema validation: ${result.error.message}`);
+  }
+  return result.data;
+}
+
+function parseRows<T>(schema: z.ZodType<T>, rows: unknown[]): T[] {
+  return rows.map((row) => parseRow(schema, row));
+}
 
 export class Store {
   private db: DB;
 
   constructor(dbPath: string) {
-    mkdirSync(dirname(resolve(dbPath)), { recursive: true });
+    const dir = dirname(resolve(dbPath));
+    mkdirSync(dir, { recursive: true, mode: 0o700 });
+    try {
+      // Tighten dir mode in case it pre-existed with a looser umask.
+      chmodSync(dir, 0o700);
+    } catch {
+      /* best-effort */
+    }
     this.db = new Database(dbPath);
+    try {
+      chmodSync(dbPath, 0o600);
+    } catch {
+      /* best-effort */
+    }
     this.db.pragma("journal_mode = WAL");
     this.db.pragma("foreign_keys = ON");
     this.applyMigrations();
@@ -85,6 +133,14 @@ export class Store {
 
   private applyMigrations(): void {
     this.db.exec(SCHEMA_SQL);
+    // Backfill new columns onto pre-existing tables. SQLite has no
+    // "ADD COLUMN IF NOT EXISTS"; use a best-effort try/catch so a fresh DB
+    // (where the column already exists from SCHEMA_SQL) is a no-op.
+    try {
+      this.db.exec("ALTER TABLE tweets_seen ADD COLUMN seen_count INTEGER NOT NULL DEFAULT 1");
+    } catch {
+      /* column already exists */
+    }
   }
 
   hasSeen(tweetId: string): boolean {
@@ -92,12 +148,21 @@ export class Store {
     return row !== undefined;
   }
 
-  recordSeen(record: SeenTweet): void {
+  recordSeen(record: SeenTweetInput): void {
+    // Bump seen_count on conflict so the dashboard can distinguish a tweet
+    // we processed once from one that was force-replayed multiple times.
     this.db
       .prepare(
-        `INSERT OR REPLACE INTO tweets_seen
-         (tweet_id, author_handle, seen_at, classifier_score, decision, reason)
-         VALUES (?, ?, ?, ?, ?, ?)`,
+        `INSERT INTO tweets_seen
+         (tweet_id, author_handle, seen_at, classifier_score, decision, reason, seen_count)
+         VALUES (?, ?, ?, ?, ?, ?, 1)
+         ON CONFLICT(tweet_id) DO UPDATE SET
+           author_handle = excluded.author_handle,
+           seen_at = excluded.seen_at,
+           classifier_score = excluded.classifier_score,
+           decision = excluded.decision,
+           reason = excluded.reason,
+           seen_count = seen_count + 1`,
       )
       .run(
         record.tweet_id,
@@ -109,36 +174,117 @@ export class Store {
       );
   }
 
-  recordLaunch(record: LaunchRecord): void {
-    const insertLaunch = this.db.prepare(
-      `INSERT INTO launches
-       (mint, ticker, name, source_tweet_id, source_author, sol_spent,
-        tx_signature, metadata_uri, image_cid, launched_at, ai_reasoning)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+  /**
+   * Atomically check the daily caps and reserve a slot under the same
+   * transaction that reads the counter, closing the TOCTOU window between
+   * `getDailyCounter` and the launch insert. Caller follows up with
+   * `commitReservedLaunch` after the SDK returns success, or with
+   * `rollbackReservation` on failure.
+   *
+   * Returns `null` if the reservation would breach a cap.
+   */
+  reserveLaunchSlot(args: {
+    timestampMs: number;
+    plannedSpendSol: number;
+    maxLaunchesPerDay: number;
+    maxSolPerDay: number;
+  }): LaunchReservation | null {
+    const date = isoDateUtc(args.timestampMs);
+    const select = this.db.prepare(
+      "SELECT date, launches_count, sol_spent FROM daily_counters WHERE date = ?",
     );
-    const updateCounter = this.db.prepare(
+    const upsert = this.db.prepare(
       `INSERT INTO daily_counters (date, launches_count, sol_spent)
        VALUES (?, 1, ?)
        ON CONFLICT(date) DO UPDATE SET
          launches_count = launches_count + 1,
          sol_spent = sol_spent + excluded.sol_spent`,
     );
-    const date = isoDateUtc(record.launched_at);
+    return this.db.transaction(() => {
+      const raw = select.get(date);
+      const before: DailyCounter = raw
+        ? parseRow(DailyCounterSchema, raw)
+        : { date, launches_count: 0, sol_spent: 0 };
+      if (before.launches_count >= args.maxLaunchesPerDay) return null;
+      if (before.sol_spent + args.plannedSpendSol > args.maxSolPerDay + FLOAT_EPS_SOL) return null;
+      upsert.run(date, args.plannedSpendSol);
+      return { date, plannedSpendSol: args.plannedSpendSol, counter: before };
+    })();
+  }
+
+  /**
+   * Roll back a previously-reserved slot. Used when the launch failed after
+   * `reserveLaunchSlot` succeeded (IPFS failure, SDK failure, etc.) so the
+   * cap is freed for the next tweet.
+   */
+  rollbackReservation(args: Pick<LaunchReservation, "date" | "plannedSpendSol">): void {
+    this.db
+      .prepare(
+        `UPDATE daily_counters
+         SET launches_count = MAX(0, launches_count - 1),
+             sol_spent = MAX(0, sol_spent - ?)
+         WHERE date = ?`,
+      )
+      .run(args.plannedSpendSol, args.date);
+  }
+
+  /**
+   * Commit a launch into the DB *without* re-bumping the counter. That was
+   * already done by `reserveLaunchSlot`. Instead, this reconciles the
+   * conservative reservation to the measured on-chain cost so today's spend
+   * reflects actual lamports spent once the launch is committed.
+   */
+  commitReservedLaunch(
+    launch: LaunchRecord,
+    seen: SeenTweetInput,
+    reservation: Pick<LaunchReservation, "date" | "plannedSpendSol">,
+  ): void {
+    const insertLaunch = this.db.prepare(
+      `INSERT INTO launches
+       (mint, ticker, name, source_tweet_id, source_author, sol_spent,
+        tx_signature, metadata_uri, image_cid, launched_at, classification_reason)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    );
+    const upsertSeen = this.db.prepare(
+      `INSERT INTO tweets_seen
+       (tweet_id, author_handle, seen_at, classifier_score, decision, reason, seen_count)
+       VALUES (?, ?, ?, ?, ?, ?, 1)
+       ON CONFLICT(tweet_id) DO UPDATE SET
+         author_handle = excluded.author_handle,
+         seen_at = excluded.seen_at,
+         classifier_score = excluded.classifier_score,
+         decision = excluded.decision,
+         reason = excluded.reason,
+         seen_count = seen_count + 1`,
+    );
+    const reconcileCounter = this.db.prepare(
+      `UPDATE daily_counters
+       SET sol_spent = MAX(0, sol_spent - ?) + ?
+       WHERE date = ?`,
+    );
     this.db.transaction(() => {
       insertLaunch.run(
-        record.mint,
-        record.ticker,
-        record.name,
-        record.source_tweet_id,
-        record.source_author,
-        record.sol_spent,
-        record.tx_signature,
-        record.metadata_uri,
-        record.image_cid,
-        record.launched_at,
-        record.ai_reasoning,
+        launch.mint,
+        launch.ticker,
+        launch.name,
+        launch.source_tweet_id,
+        launch.source_author,
+        launch.sol_spent,
+        launch.tx_signature,
+        launch.metadata_uri,
+        launch.image_cid,
+        launch.launched_at,
+        launch.classification_reason,
       );
-      updateCounter.run(date, record.sol_spent);
+      upsertSeen.run(
+        seen.tweet_id,
+        seen.author_handle,
+        seen.seen_at,
+        seen.classifier_score,
+        seen.decision,
+        seen.reason,
+      );
+      reconcileCounter.run(reservation.plannedSpendSol, launch.sol_spent, reservation.date);
     })();
   }
 
@@ -146,34 +292,47 @@ export class Store {
     const date = isoDateUtc(timestampMs);
     const row = this.db
       .prepare("SELECT date, launches_count, sol_spent FROM daily_counters WHERE date = ?")
-      .get(date) as DailyCounter | undefined;
-    return row ?? { date, launches_count: 0, sol_spent: 0 };
+      .get(date);
+    return row ? parseRow(DailyCounterSchema, row) : { date, launches_count: 0, sol_spent: 0 };
+  }
+
+  getCommittedDailyCounter(timestampMs: number): DailyCounter {
+    const date = isoDateUtc(timestampMs);
+    const row = this.db
+      .prepare(
+        `SELECT COUNT(*) AS launches_count, COALESCE(SUM(sol_spent), 0) AS sol_spent
+         FROM launches
+         WHERE substr(datetime(launched_at / 1000, 'unixepoch'), 1, 10) = ?`,
+      )
+      .get(date);
+    const totals = z.object({ launches_count: z.number(), sol_spent: z.number() }).parse(row);
+    return { date, launches_count: totals.launches_count, sol_spent: totals.sol_spent };
   }
 
   lastLaunchByAuthor(authorHandle: string): LaunchRecord | null {
     const row = this.db
       .prepare("SELECT * FROM launches WHERE source_author = ? ORDER BY launched_at DESC LIMIT 1")
-      .get(authorHandle) as LaunchRecord | undefined;
-    return row ?? null;
+      .get(authorHandle);
+    return row ? parseRow(LaunchRecordSchema, row) : null;
   }
 
   recentSeen(limit: number): SeenTweet[] {
-    return this.db
+    const rows = this.db
       .prepare("SELECT * FROM tweets_seen ORDER BY seen_at DESC LIMIT ?")
-      .all(limit) as SeenTweet[];
+      .all(limit);
+    return parseRows(SeenTweetSchema, rows);
   }
 
   recentLaunches(limit: number): LaunchRecord[] {
-    return this.db
+    const rows = this.db
       .prepare("SELECT * FROM launches ORDER BY launched_at DESC LIMIT ?")
-      .all(limit) as LaunchRecord[];
+      .all(limit);
+    return parseRows(LaunchRecordSchema, rows);
   }
 
   getLaunch(mint: string): LaunchRecord | null {
-    const row = this.db.prepare("SELECT * FROM launches WHERE mint = ?").get(mint) as
-      | LaunchRecord
-      | undefined;
-    return row ?? null;
+    const row = this.db.prepare("SELECT * FROM launches WHERE mint = ?").get(mint);
+    return row ? parseRow(LaunchRecordSchema, row) : null;
   }
 
   close(): void {
@@ -182,7 +341,7 @@ export class Store {
 }
 
 export function isoDateUtc(timestampMs: number): string {
-  // YYYY-MM-DD in UTC. Used as the daily_counters PK.
+  // YYYY-MM-DD in UTC, used as the daily_counters primary key.
   const d = new Date(timestampMs);
   return d.toISOString().slice(0, 10);
 }

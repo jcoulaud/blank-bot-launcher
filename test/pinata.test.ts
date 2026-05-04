@@ -1,5 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { buildTokenMetadata, uploadImage, uploadMetadata } from "../src/launcher/pinata.js";
+import {
+  buildTokenMetadata,
+  uploadImage,
+  uploadMetadata,
+  waitForMetadataAvailability,
+} from "../src/launcher/pinata.js";
 
 const originalFetch = globalThis.fetch;
 
@@ -17,6 +22,13 @@ function v3Response(cid: string): Response {
     }),
     { status: 200, headers: { "content-type": "application/json" } },
   );
+}
+
+function metadataResponse(): Response {
+  return new Response(JSON.stringify(sampleMeta), {
+    status: 200,
+    headers: { "content-type": "application/json" },
+  });
 }
 
 const sampleMeta = buildTokenMetadata({
@@ -62,6 +74,26 @@ describe("Pinata V3 uploads", () => {
     globalThis.fetch = vi.fn().mockResolvedValue(v3Response("QmFakeMetaCid")) as never;
     const cid = await uploadMetadata(sampleMeta, { jwt: "x" });
     expect(cid).toBe("QmFakeMetaCid");
+  });
+
+  it("waitForMetadataAvailability waits until gateway JSON is readable", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(new Response("not found", { status: 404 }))
+      .mockResolvedValueOnce(metadataResponse());
+    globalThis.fetch = fetchMock as never;
+
+    const url = await waitForMetadataAvailability("QmFakeMetaCid", sampleMeta, {
+      pollIntervalMs: 1,
+      timeoutMs: 100,
+    });
+
+    expect(url).toBe("https://gateway.pinata.cloud/ipfs/QmFakeMetaCid");
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(fetchMock.mock.calls[0]?.[1]).toMatchObject({
+      headers: { accept: "application/json" },
+      redirect: "manual",
+    });
   });
 
   it("uploadMetadata rejects when ipfs:// uri exceeds 72 bytes", async () => {

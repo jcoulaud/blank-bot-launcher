@@ -2,7 +2,7 @@ import { generateObject, type LanguageModel } from "ai";
 import { z } from "zod";
 import { getLogger } from "../logger.js";
 import type { Tweet } from "../sources/tweet-source.js";
-import { buildClassifierPrompt, PROMPT_VERSION } from "./prompts.js";
+import { buildClassifierPrompt } from "./prompts.js";
 
 export const ClassificationSchema = z.object({
   shouldLaunch: z.boolean(),
@@ -49,7 +49,6 @@ export async function classifyTweet(
   });
   log.info(
     {
-      prompt_version: PROMPT_VERSION,
       duration_ms: Date.now() - start,
       should_launch: result.object.shouldLaunch,
       confidence: result.object.confidence,

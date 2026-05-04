@@ -1,65 +1,69 @@
+// Validates the shutdown drain/timeout race used by the SIGTERM handler in
+// src/index.ts.
+//
+// We re-implement the same Promise.race pattern locally so the test isn't
+// coupled to a full bot bootstrap. The shape under test is:
+//
+//   await Promise.race([
+//     mutex.waitForUnlock().then(() => "drained"),
+//     sleep(timeoutMs).then(() => "timeout"),
+//   ]);
+//
+// If this race ever stops behaving the way index.ts depends on, the test
+// breaks even though it doesn't import index.ts directly.
 import { setTimeout as sleep } from "node:timers/promises";
 import { Mutex } from "async-mutex";
 import { describe, expect, it } from "vitest";
 
-/**
- * Tests the drain pattern from src/index.ts. We can't easily test the live
- * SIGTERM handler without spawning a child process, so we test the underlying
- * primitive: the Mutex + waitForUnlock approach used to drain in-flight work.
- */
-describe("graceful shutdown drain pattern (D4)", () => {
-  it("waitForUnlock resolves immediately when nothing is in flight", async () => {
-    const m = new Mutex();
-    const start = Date.now();
-    await m.waitForUnlock();
-    expect(Date.now() - start).toBeLessThan(50);
-  });
+async function drainOrTimeout(mutex: Mutex, timeoutMs: number): Promise<"drained" | "timeout"> {
+  return Promise.race([
+    mutex.waitForUnlock().then(() => "drained" as const),
+    sleep(timeoutMs).then(() => "timeout" as const),
+  ]);
+}
 
-  it("waitForUnlock blocks until current critical section completes", async () => {
-    const m = new Mutex();
-    const order: string[] = [];
-
-    const work = m.runExclusive(async () => {
-      order.push("work-start");
-      await sleep(50);
-      order.push("work-end");
-    });
-
-    // Give the work a tick to acquire the lock
-    await sleep(5);
-    const drainPromise = m.waitForUnlock().then(() => order.push("drained"));
-    await Promise.all([work, drainPromise]);
-
-    expect(order).toEqual(["work-start", "work-end", "drained"]);
-  });
-
-  it("Promise.race yields 'timeout' when work exceeds timeout budget", async () => {
-    const m = new Mutex();
-    const work = m.runExclusive(async () => {
-      await sleep(200);
-    });
-    await sleep(5);
-
-    const result = await Promise.race([
-      m.waitForUnlock().then(() => "drained" as const),
-      sleep(50).then(() => "timeout" as const),
-    ]);
-    expect(result).toBe("timeout");
-    await work;
-  });
-
-  it("Promise.race yields 'drained' when work fits within timeout budget", async () => {
-    const m = new Mutex();
-    const work = m.runExclusive(async () => {
-      await sleep(20);
-    });
-    await sleep(5);
-
-    const result = await Promise.race([
-      m.waitForUnlock().then(() => "drained" as const),
-      sleep(200).then(() => "timeout" as const),
-    ]);
+describe("shutdown mutex drain", () => {
+  it("returns 'drained' immediately when mutex is idle", async () => {
+    const mutex = new Mutex();
+    const result = await drainOrTimeout(mutex, 1000);
     expect(result).toBe("drained");
-    await work;
+  });
+
+  it("returns 'drained' once the held lock releases before timeout", async () => {
+    const mutex = new Mutex();
+    const release = await mutex.acquire();
+    setTimeout(release, 50);
+    const result = await drainOrTimeout(mutex, 500);
+    expect(result).toBe("drained");
+  });
+
+  it("returns 'timeout' when the mutex is held longer than the timeout", async () => {
+    const mutex = new Mutex();
+    const release = await mutex.acquire();
+    try {
+      const result = await drainOrTimeout(mutex, 100);
+      expect(result).toBe("timeout");
+    } finally {
+      release();
+    }
+  });
+});
+
+describe("shutdown re-entrancy guard", () => {
+  // The `shuttingDown` flag prevents a second SIGTERM from running the close
+  // path while the first call is still mid-await.
+  it("ignores second invocation while first is in flight", async () => {
+    let calls = 0;
+    let shuttingDown = false;
+    const fakeShutdown = async () => {
+      if (shuttingDown) return;
+      shuttingDown = true;
+      calls++;
+      await sleep(20);
+    };
+    const a = fakeShutdown();
+    const b = fakeShutdown();
+    await Promise.all([a, b]);
+    expect(calls).toBe(1);
   });
 });

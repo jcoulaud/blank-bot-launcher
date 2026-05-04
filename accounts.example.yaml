@@ -1,12 +1,17 @@
-# Default followed accounts. Copy this file to accounts.yaml and edit.
-# The bot connects one X Filtered Stream rule of the form:
-#   from:elonmusk OR from:sama OR from:saro OR from:VitalikButerin OR ...
-# Pay-per-use rule limit is 1024 chars; with `from:` ORs that comfortably fits ~50 accounts.
+# Followed accounts for the X Filtered Stream rule.
+#
+# Copy this file to accounts.yaml and replace the handles below with your own
+# list. The handles here are illustrative only. They are well-known accounts
+# kept as placeholders so the example is concrete, not an endorsement of any
+# specific account as a launch target.
+#
+# The bot installs one rule of the shape:
+#   from:handle1 OR from:handle2 OR ...
+# X caps the rule at 1024 bytes (about 50 handles in this format).
 
 accounts:
-  - handle: elonmusk           # tech + meme energy
-  - handle: sama               # AI / OpenAI announcements
-  - handle: saro               # crypto narratives
-  - handle: VitalikButerin     # ETH founder, dry humor moves crypto memes
-  - handle: aeyakovenko        # Solana co-founder, on-chain memes land hard
-  - handle: cz_binance         # short, market-moving
+  - handle: elonmusk
+  - handle: sama
+  - handle: toly
+  - handle: cz_binance
+  - handle: Pumpfun

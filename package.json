@@ -1,29 +1,48 @@
 {
   "name": "blank-bot",
   "version": "0.1.0",
-  "description": "Open-source reference bot that launches Solana memecoins from influencer tweets via the blank.build SDK",
-  "type": "module",
+  "description": "TypeScript reference bot for launching Solana tokens with the blank.build SDK.",
   "license": "MIT",
+  "author": "Julien Coulaud",
+  "homepage": "https://github.com/jcoulaud/blank-bot-launcher#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/jcoulaud/blank-bot-launcher.git"
+  },
+  "bugs": {
+    "url": "https://github.com/jcoulaud/blank-bot-launcher/issues"
+  },
+  "keywords": [
+    "blank.build",
+    "solana",
+    "memecoin",
+    "ai-sdk",
+    "gemini",
+    "twitter",
+    "x-api",
+    "reference",
+    "example"
+  ],
+  "type": "module",
   "engines": {
     "node": ">=20"
-  },
-  "bin": {
-    "blank-bot": "./bin/blank-bot.mjs"
   },
   "scripts": {
     "dev": "tsx watch src/index.ts",
     "start": "tsx src/index.ts",
-    "build": "tsc -p tsconfig.json",
+    "backtest": "tsx src/index.ts --backtest",
     "test": "vitest run",
     "test:watch": "vitest",
+    "build": "tsc --noEmit",
     "lint": "biome check src test",
     "format": "biome format --write src test",
-    "check": "tsc --noEmit && biome check src test",
-    "check-config": "tsx src/index.ts --check-config"
+    "check": "tsc --noEmit && tsc --noEmit --project tsconfig.test.json && biome check src test",
+    "check-config": "tsx src/index.ts --check-config",
+    "reset-today": "tsx scripts/reset-today.ts"
   },
   "dependencies": {
     "@ai-sdk/google": "^3.0.67",
-    "@blankdotbuild/sdk": "^2.0.2",
+    "@blankdotbuild/sdk": "^2.0.10",
     "@solana/web3.js": "^1.98.4",
     "ai": "^6.0.174",
     "async-mutex": "^0.5.0",
@@ -31,9 +50,9 @@
     "bs58": "^6.0.0",
     "dotenv": "^17.4.2",
     "express": "^5.2.1",
+    "lucide-static": "^1.14.0",
     "pino": "^10.3.1",
     "pino-pretty": "^13.1.3",
-    "telegraf": "^4.16.3",
     "twitter-api-v2": "^1.29.0",
     "yaml": "^2.8.4",
     "zod": "^4.4.2"

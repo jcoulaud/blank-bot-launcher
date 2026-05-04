@@ -3,15 +3,22 @@ dist/
 coverage/
 
 .env
-.env.local
+.env.*
+!.env.example
 
 accounts.yaml
 
-data/*.db
-data/*.db-journal
-data/cache/
+data/
+
+secrets/
+keys/
+*.pem
+*.key
+*.crt
+id_rsa*
 
 *.log
+*.tsbuildinfo
 .DS_Store
 .idea/
 .vscode/
