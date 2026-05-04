@@ -1,0 +1,17 @@
+node_modules/
+dist/
+coverage/
+
+.env
+.env.local
+
+accounts.yaml
+
+data/*.db
+data/*.db-journal
+data/cache/
+
+*.log
+.DS_Store
+.idea/
+.vscode/
