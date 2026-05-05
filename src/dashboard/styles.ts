@@ -118,6 +118,23 @@ th:last-child,td:last-child{padding-right:24px}
 .ticker-link:hover{color:var(--link-teal)}
 .empty{padding:48px 24px;color:var(--ash);font-size:14px;text-align:center}
 
+/* pager */
+.pager{
+  display:flex;align-items:center;justify-content:space-between;gap:16px;
+  padding:12px 24px;border-top:1px solid var(--hairline);
+  background:var(--surface-card);font-size:13px;color:var(--mute);
+  font-variant-numeric:tabular-nums;
+}
+.pager-nav{display:inline-flex;gap:8px}
+.pager-link{
+  display:inline-block;padding:6px 12px;border-radius:6px;
+  border:1px solid var(--hairline);background:var(--surface-card);
+  color:var(--ink);font-weight:600;text-decoration:none;
+}
+.pager-link:hover,.pager-link:focus{background:var(--surface-soft);text-decoration:none}
+.pager-link-disabled{color:var(--ash);background:var(--surface-soft);cursor:not-allowed}
+.pager-link-disabled:hover{background:var(--surface-soft)}
+
 /* pills */
 .pill{
   display:inline-block;padding:3px 10px;border-radius:9999px;

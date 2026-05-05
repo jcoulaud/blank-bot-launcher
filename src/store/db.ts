@@ -316,18 +316,28 @@ export class Store {
     return row ? parseRow(LaunchRecordSchema, row) : null;
   }
 
-  recentSeen(limit: number): SeenTweet[] {
+  recentSeen(limit: number, offset = 0): SeenTweet[] {
     const rows = this.db
-      .prepare("SELECT * FROM tweets_seen ORDER BY seen_at DESC LIMIT ?")
-      .all(limit);
+      .prepare("SELECT * FROM tweets_seen ORDER BY seen_at DESC LIMIT ? OFFSET ?")
+      .all(limit, offset);
     return parseRows(SeenTweetSchema, rows);
   }
 
-  recentLaunches(limit: number): LaunchRecord[] {
+  recentLaunches(limit: number, offset = 0): LaunchRecord[] {
     const rows = this.db
-      .prepare("SELECT * FROM launches ORDER BY launched_at DESC LIMIT ?")
-      .all(limit);
+      .prepare("SELECT * FROM launches ORDER BY launched_at DESC LIMIT ? OFFSET ?")
+      .all(limit, offset);
     return parseRows(LaunchRecordSchema, rows);
+  }
+
+  countSeen(): number {
+    const row = this.db.prepare("SELECT COUNT(*) AS n FROM tweets_seen").get();
+    return z.object({ n: z.number() }).parse(row).n;
+  }
+
+  countLaunches(): number {
+    const row = this.db.prepare("SELECT COUNT(*) AS n FROM launches").get();
+    return z.object({ n: z.number() }).parse(row).n;
   }
 
   getLaunch(mint: string): LaunchRecord | null {

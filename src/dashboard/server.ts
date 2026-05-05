@@ -41,6 +41,17 @@ export type DashboardOptions = {
 // render.ts.
 const STYLE_SHA256 = createHash("sha256").update(STYLES).digest("base64");
 
+// Parse a page query param. Returns 1 for missing/invalid input; clamps to the
+// last page when the requested page is past the end. Express query values can
+// be string | string[] | ParsedQs; we only honour plain strings.
+function parsePage(raw: unknown, total: number, pageSize: number): number {
+  const lastPage = Math.max(1, Math.ceil(total / pageSize));
+  if (typeof raw !== "string") return 1;
+  const n = Number.parseInt(raw, 10);
+  if (!Number.isFinite(n) || n < 1) return 1;
+  return Math.min(n, lastPage);
+}
+
 export function startDashboard(options: DashboardOptions): { close: () => Promise<void> } {
   const app = express();
   app.disable("x-powered-by");
@@ -84,7 +95,10 @@ export function startDashboard(options: DashboardOptions): { close: () => Promis
     }
   };
 
-  app.get("/", async (_req: Request, res: Response) => {
+  const SEEN_PAGE_SIZE = 20;
+  const LAUNCHES_PAGE_SIZE = 20;
+
+  app.get("/", async (req: Request, res: Response) => {
     const now = Date.now();
     const counter = options.store.getCommittedDailyCounter(now);
     // The reserved counter includes in-flight launches that haven't yet
@@ -95,8 +109,16 @@ export function startDashboard(options: DashboardOptions): { close: () => Promis
     const reserved = options.store.getDailyCounter(now);
     const openReservations = Math.max(0, reserved.launches_count - counter.launches_count);
     const reservedSolPending = Math.max(0, reserved.sol_spent - counter.sol_spent);
-    const seen = options.store.recentSeen(50);
-    const launches = options.store.recentLaunches(20);
+
+    const seenTotal = options.store.countSeen();
+    const launchesTotal = options.store.countLaunches();
+    const seenPage = parsePage(req.query.seen_page, seenTotal, SEEN_PAGE_SIZE);
+    const launchesPage = parsePage(req.query.launches_page, launchesTotal, LAUNCHES_PAGE_SIZE);
+    const seen = options.store.recentSeen(SEEN_PAGE_SIZE, (seenPage - 1) * SEEN_PAGE_SIZE);
+    const launches = options.store.recentLaunches(
+      LAUNCHES_PAGE_SIZE,
+      (launchesPage - 1) * LAUNCHES_PAGE_SIZE,
+    );
     const balance = await getBalanceMemo();
 
     res.type("html").send(
@@ -105,7 +127,13 @@ export function startDashboard(options: DashboardOptions): { close: () => Promis
         openReservations,
         reservedSolPending,
         seen,
+        seenPage,
+        seenPageSize: SEEN_PAGE_SIZE,
+        seenTotal,
         launches,
+        launchesPage,
+        launchesPageSize: LAUNCHES_PAGE_SIZE,
+        launchesTotal,
         balanceSol: balance.sol,
         balanceStale: balance.stale,
         walletPubkey: options.wallet.publicKey.toBase58(),

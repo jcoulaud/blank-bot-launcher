@@ -68,7 +68,13 @@ export function renderHome(args: {
   openReservations?: number;
   reservedSolPending?: number;
   seen: SeenTweet[];
+  seenPage: number;
+  seenPageSize: number;
+  seenTotal: number;
   launches: LaunchRecord[];
+  launchesPage: number;
+  launchesPageSize: number;
+  launchesTotal: number;
   balanceSol: number;
   balanceStale?: boolean;
   walletPubkey: string;
@@ -136,7 +142,7 @@ export function renderHome(args: {
     </div>
 
     <div class="section">
-      <h2 class="h2">Recent launches</h2>
+      <h2 class="h2" id="launches">Recent launches</h2>
       <div class="table-card">
         <div class="table-scroll">
           <table>
@@ -149,11 +155,20 @@ export function renderHome(args: {
             }</tbody>
           </table>
         </div>
+        ${renderPager({
+          page: args.launchesPage,
+          pageSize: args.launchesPageSize,
+          total: args.launchesTotal,
+          param: "launches_page",
+          otherParam: "seen_page",
+          otherValue: args.seenPage,
+          anchor: "launches",
+        })}
       </div>
     </div>
 
     <div class="section">
-      <h2 class="h2">Recent tweets seen</h2>
+      <h2 class="h2" id="tweets">Recent tweets seen</h2>
       <div class="table-card">
         <div class="table-scroll">
           <table>
@@ -165,6 +180,15 @@ export function renderHome(args: {
             }</tbody>
           </table>
         </div>
+        ${renderPager({
+          page: args.seenPage,
+          pageSize: args.seenPageSize,
+          total: args.seenTotal,
+          param: "seen_page",
+          otherParam: "launches_page",
+          otherValue: args.launchesPage,
+          anchor: "tweets",
+        })}
       </div>
     </div>
   `;
@@ -262,6 +286,40 @@ export function renderError(title: string, tone: ErrorTone, message: string): st
     </div>
   `;
   return layout(title, body);
+}
+
+function renderPager(args: {
+  page: number;
+  pageSize: number;
+  total: number;
+  param: string;
+  otherParam: string;
+  otherValue: number;
+  anchor: string;
+}): string {
+  if (args.total <= args.pageSize) return "";
+  const lastPage = Math.max(1, Math.ceil(args.total / args.pageSize));
+  const from = (args.page - 1) * args.pageSize + 1;
+  const to = Math.min(args.page * args.pageSize, args.total);
+  const buildHref = (p: number): string => {
+    const params = new URLSearchParams();
+    if (p > 1) params.set(args.param, String(p));
+    if (args.otherValue > 1) params.set(args.otherParam, String(args.otherValue));
+    const qs = params.toString();
+    return `/${qs ? `?${qs}` : ""}#${args.anchor}`;
+  };
+  const prev =
+    args.page > 1
+      ? `<a class="pager-link" href="${esc(buildHref(args.page - 1))}" rel="prev">&larr; Prev</a>`
+      : `<span class="pager-link pager-link-disabled" aria-disabled="true">&larr; Prev</span>`;
+  const next =
+    args.page < lastPage
+      ? `<a class="pager-link" href="${esc(buildHref(args.page + 1))}" rel="next">Next &rarr;</a>`
+      : `<span class="pager-link pager-link-disabled" aria-disabled="true">Next &rarr;</span>`;
+  return `<div class="pager">
+    <span class="pager-status">${from}&ndash;${to} of ${args.total}</span>
+    <span class="pager-nav">${prev}${next}</span>
+  </div>`;
 }
 
 function tweetUrl(authorHandle: string, tweetId: string): string {
