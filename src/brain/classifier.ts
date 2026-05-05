@@ -1,7 +1,7 @@
 import { generateObject, type LanguageModel } from "ai";
 import { z } from "zod";
 import { getLogger } from "../logger.js";
-import type { Tweet } from "../sources/tweet-source.js";
+import { getPrimaryLaunchImage, type Tweet } from "../sources/tweet-source.js";
 import { buildClassifierPrompt } from "./prompts.js";
 
 export const ClassificationSchema = z.object({
@@ -28,15 +28,14 @@ export async function classifyTweet(
   });
 
   const prompt = buildClassifierPrompt(tweet);
+  const primaryImage = getPrimaryLaunchImage(tweet);
   const messages: Parameters<typeof generateObject>[0]["messages"] = [
     {
       role: "user",
       content: [
         { type: "text", text: prompt },
-        // Multimodal: include the first tweet image if present
-        ...(tweet.images[0]
-          ? [{ type: "image" as const, image: new URL(tweet.images[0].url) }]
-          : []),
+        // Multimodal: include the launch-relevant image, including quoted-tweet media.
+        ...(primaryImage ? [{ type: "image" as const, image: new URL(primaryImage.url) }] : []),
       ],
     },
   ];

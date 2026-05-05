@@ -360,7 +360,13 @@ async function fetchSingleTweet(
   const client = new TwitterApi(bearerToken);
   const single = await client.v2.singleTweet(id, {
     "tweet.fields": ["author_id", "created_at", "attachments", "referenced_tweets"],
-    expansions: ["author_id", "attachments.media_keys", "referenced_tweets.id"],
+    expansions: [
+      "author_id",
+      "attachments.media_keys",
+      "referenced_tweets.id",
+      "referenced_tweets.id.author_id",
+      "referenced_tweets.id.attachments.media_keys",
+    ],
     "media.fields": ["url", "type", "preview_image_url"],
     "user.fields": ["username"],
   });

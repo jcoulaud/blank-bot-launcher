@@ -84,7 +84,13 @@ export class FilteredStreamSource implements TweetSource {
 
       this.stream = await this.client.v2.searchStream({
         "tweet.fields": ["author_id", "created_at", "attachments", "referenced_tweets"],
-        expansions: ["author_id", "attachments.media_keys", "referenced_tweets.id"],
+        expansions: [
+          "author_id",
+          "attachments.media_keys",
+          "referenced_tweets.id",
+          "referenced_tweets.id.author_id",
+          "referenced_tweets.id.attachments.media_keys",
+        ],
         "media.fields": ["url", "type", "preview_image_url"],
         "user.fields": ["username"],
       });
@@ -243,16 +249,7 @@ export function parseStreamPayload(payload: StreamPayloadLike): Tweet | null {
   const isRetweet = refs.some((r) => r.type === "retweeted");
   const isQuoteTweet = refs.some((r) => r.type === "quoted");
 
-  const mediaKeys = data.attachments?.media_keys ?? [];
-  const images: TweetMedia[] = [];
-  for (const key of mediaKeys) {
-    const m = includes?.media?.find((mm) => mm.media_key === key);
-    if (!m) continue;
-    if (m.type === "photo" && m.url && isAllowedImageUrl(m.url)) {
-      images.push({ url: m.url });
-    }
-  }
-
+  const images = extractImages(data.attachments?.media_keys ?? [], includes);
   let quotedTweet: Tweet | undefined;
   const quotedRef = refs.find((r) => r.type === "quoted");
   if (quotedRef && includes?.tweets) {
@@ -265,7 +262,7 @@ export function parseStreamPayload(payload: StreamPayloadLike): Tweet | null {
         authorId: q.author_id ?? "",
         text: q.text,
         createdAt: new Date(q.created_at),
-        images: [], // not expanded recursively
+        images: extractImages(q.attachments?.media_keys ?? [], includes),
         isReply: false,
         isRetweet: false,
         isQuoteTweet: false,
@@ -286,6 +283,21 @@ export function parseStreamPayload(payload: StreamPayloadLike): Tweet | null {
   };
   if (quotedTweet) tweet.quotedTweet = quotedTweet;
   return tweet;
+}
+
+function extractImages(
+  mediaKeys: readonly string[],
+  includes: StreamPayloadLike["includes"] | undefined,
+): TweetMedia[] {
+  const images: TweetMedia[] = [];
+  for (const key of mediaKeys) {
+    const m = includes?.media?.find((mm) => mm.media_key === key);
+    if (!m) continue;
+    if (m.type === "photo" && m.url && isAllowedImageUrl(m.url)) {
+      images.push({ url: m.url });
+    }
+  }
+  return images;
 }
 
 /**

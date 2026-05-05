@@ -188,6 +188,15 @@ function setupHappyMocks(
   });
 }
 
+function promptTextFromGenerateObjectCall(index: number): string {
+  const arg = generateObjectMock.mock.calls[index]?.[0] as {
+    prompt?: string;
+    messages?: Array<{ content?: Array<{ type?: string; text?: string }> }>;
+  };
+  if (arg.prompt) return arg.prompt;
+  return arg.messages?.[0]?.content?.find((part) => part.type === "text")?.text ?? "";
+}
+
 describe("runPipeline integration", () => {
   let tmp: string;
   let store: Store;
@@ -226,9 +235,9 @@ describe("runPipeline integration", () => {
     expect(launches[0]?.tx_signature).toBe("SIG_XYZ");
     expect(launches[0]?.sol_spent).toBeCloseTo(0.0123);
     expect(blankCreateMock).toHaveBeenCalledTimes(1);
-    const metadataCall = generateObjectMock.mock.calls[1]?.[0] as { prompt?: string };
-    expect(metadataCall?.prompt).toContain("Classifier meme read");
-    expect(metadataCall?.prompt).toContain("memeable");
+    const metadataPrompt = promptTextFromGenerateObjectCall(1);
+    expect(metadataPrompt).toContain("Classifier meme read");
+    expect(metadataPrompt).toContain("memeable");
     expect(store.getDailyCounter(Date.now()).launches_count).toBe(1);
     expect(store.getDailyCounter(Date.now()).sol_spent).toBeCloseTo(0.0123);
     expect(store.hasSeen("t1")).toBe(true);

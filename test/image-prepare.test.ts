@@ -17,6 +17,16 @@ const tweetWithImage: Tweet = {
 };
 
 const tweetNoImage: Tweet = { ...tweetWithImage, images: [] };
+const quoteTweetWithImage: Tweet = {
+  ...tweetNoImage,
+  isQuoteTweet: true,
+  quotedTweet: {
+    ...tweetWithImage,
+    id: "q1",
+    authorHandle: "coinnews",
+    images: [{ url: "https://pbs.twimg.com/media/quoted.jpg" }],
+  },
+};
 
 // Standard public IPv4 so SSRF guard accepts the host.
 function mockDnsPublic() {
@@ -133,6 +143,32 @@ describe("prepareImage dispatch", () => {
     const body = JSON.parse(((geminiCall?.[1] as RequestInit).body as string) ?? "{}");
     const parts = body.contents?.[0]?.parts ?? [];
     expect(parts.some((p: { inlineData?: unknown }) => p.inlineData)).toBe(true);
+  });
+
+  it("remix strategy uses quoted-tweet media when the source tweet has no image", async () => {
+    mockDnsPublic();
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(imageDownloadResponse())
+      .mockResolvedValueOnce(geminiImageResponse());
+    globalThis.fetch = fetchMock as never;
+    const { prepareImage } = await import("../src/brain/image.js");
+    const meta: Metadata = {
+      name: "completely grey before launch",
+      symbol: "GREY",
+      imageStrategy: "remix",
+      remixInstructions: "keep the quoted portrait and make the hair grey",
+    };
+    const result = await prepareImage(quoteTweetWithImage, meta, { apiKey: "k", model: "m" });
+    expect(result.source).toBe("remix");
+    expect(fetchMock.mock.calls[0]?.[0]).toBe("https://pbs.twimg.com/media/quoted.jpg");
+    const body = JSON.parse(((fetchMock.mock.calls[1]?.[1] as RequestInit).body as string) ?? "{}");
+    const parts = body.contents?.[0]?.parts ?? [];
+    expect(parts.some((p: { inlineData?: unknown }) => p.inlineData)).toBe(true);
+    const prompt = parts.find((p: { text?: string }) => p.text)?.text ?? "";
+    expect(prompt).toContain("make the hair grey");
+    expect(prompt).toContain("Keep the source subject recognizable");
+    expect(prompt).toContain("Do not replace the subject with a generic character");
   });
 
   it("remix strategy falls back to generate on download failure", async () => {

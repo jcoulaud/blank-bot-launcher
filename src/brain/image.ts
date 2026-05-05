@@ -1,7 +1,11 @@
 import { lookup } from "node:dns/promises";
 import { isIP } from "node:net";
 import { getLogger } from "../logger.js";
-import type { Tweet } from "../sources/tweet-source.js";
+import {
+  getPrimaryLaunchImage,
+  getPrimaryLaunchImageSource,
+  type Tweet,
+} from "../sources/tweet-source.js";
 import { errMsg } from "../util/errors.js";
 import { ALLOWED_IMAGE_HOSTS } from "../util/x-hosts.js";
 import type { ImageStyle, Metadata } from "./metadata.js";
@@ -44,11 +48,16 @@ export async function prepareImage(
   options: ImageOptions,
 ): Promise<PreparedImage> {
   const log = getLogger({ tweet_id: tweet.id, pipeline_stage: "image" });
+  const primaryImage = getPrimaryLaunchImage(tweet);
+  const primaryImageSource = getPrimaryLaunchImageSource(tweet);
 
-  if (meta.imageStrategy === "reuse" && tweet.images[0]) {
+  if (meta.imageStrategy === "reuse" && primaryImage) {
     try {
-      const buf = await downloadCappedImage(tweet.images[0].url);
-      log.info({ bytes: buf.buffer.length, source: "tweet" }, "reused tweet image");
+      const buf = await downloadCappedImage(primaryImage.url);
+      log.info(
+        { bytes: buf.buffer.length, source: "tweet", image_source: primaryImageSource },
+        "reused tweet image",
+      );
       return { buffer: buf.buffer, mimeType: buf.mimeType, source: "tweet" };
     } catch (err) {
       log.warn({ err: errMsg(err) }, "reuse failed, falling back to generate");
@@ -56,16 +65,16 @@ export async function prepareImage(
     }
   }
 
-  if (meta.imageStrategy === "remix" && tweet.images[0]) {
+  if (meta.imageStrategy === "remix" && primaryImage) {
     try {
-      const original = await downloadCappedImage(tweet.images[0].url);
+      const original = await downloadCappedImage(primaryImage.url);
       const remixed = await callGeminiImage({
         apiKey: options.apiKey,
         model: options.model,
-        prompt: `Edit this image according to: ${meta.remixInstructions ?? ""}. Keep the meme/character intact, refine style only. Re-render as a memecoin token icon: single subject centered, one flat saturated background color edge-to-edge, thick outlines, no panels, no captions, no text of any kind. ${FRAMING_RULES}`,
+        prompt: `Edit this image according to: ${meta.remixInstructions ?? ""}. Keep the source subject recognizable and apply only the requested joke-driven visual changes. Do not replace the subject with a generic character. Re-render as a memecoin token icon: single subject centered, one flat saturated background color edge-to-edge, thick outlines, no panels, no captions, no text of any kind. ${FRAMING_RULES}`,
         imageInline: { data: original.buffer.toString("base64"), mimeType: original.mimeType },
       });
-      log.info({ source: "remix" }, "remixed tweet image");
+      log.info({ source: "remix", image_source: primaryImageSource }, "remixed tweet image");
       return { buffer: remixed.buffer, mimeType: remixed.mimeType, source: "remix" };
     } catch (err) {
       log.warn({ err: errMsg(err) }, "remix failed, falling back to generate");

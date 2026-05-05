@@ -48,6 +48,19 @@ describe("buildClassifierPrompt", () => {
     const withImg = { ...sampleTweet, images: [{ url: "https://x" }] };
     expect(buildClassifierPrompt(withImg)).toContain("Has image: yes");
   });
+
+  it("treats a quoted-tweet image as launch visual context", () => {
+    const withQuotedImg: Tweet = {
+      ...sampleTweet,
+      isQuoteTweet: true,
+      quotedTweet: {
+        ...sampleTweet,
+        id: "q1",
+        images: [{ url: "https://pbs.twimg.com/media/quoted.jpg" }],
+      },
+    };
+    expect(buildClassifierPrompt(withQuotedImg)).toContain("Has image: yes (quoted tweet)");
+  });
 });
 
 describe("buildMetadataPrompt", () => {
@@ -111,7 +124,30 @@ describe("buildMetadataPrompt", () => {
     expect(prompt).toContain(sampleClassification.reason);
     expect(prompt).toContain("Quoted tweet author: pumpfun");
     expect(prompt).toContain("communities in control?");
+    expect(prompt).toContain("Quoted tweet has image: no");
     expect(prompt).toContain("classic-meme-poster");
     expect(prompt).toContain("clean-vector-mascot");
+  });
+
+  it("marks quoted-tweet media as available for metadata image strategy", () => {
+    const prompt = buildMetadataPrompt({
+      tweet: {
+        ...sampleTweet,
+        isQuoteTweet: true,
+        quotedTweet: {
+          ...sampleTweet,
+          id: "q1",
+          authorHandle: "coinnews",
+          text: "quoted post with portrait",
+          images: [{ url: "https://pbs.twimg.com/media/quoted.jpg" }],
+        },
+      },
+      classification: sampleClassification,
+    });
+
+    expect(prompt).toContain("Has image: yes (quoted tweet)");
+    expect(prompt).toContain("Quoted tweet has image: yes");
+    expect(prompt).toContain("remix that image");
+    expect(prompt).toContain("Do NOT replace the source subject with a generic character");
   });
 });

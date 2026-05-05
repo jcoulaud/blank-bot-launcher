@@ -1,7 +1,7 @@
 import { generateObject, type LanguageModel } from "ai";
 import { z } from "zod";
 import { getLogger } from "../logger.js";
-import type { Tweet } from "../sources/tweet-source.js";
+import { getPrimaryLaunchImage, type Tweet } from "../sources/tweet-source.js";
 import { ZERO_WIDTH_AND_BIDI_RE } from "../util/text.js";
 import { buildMetadataPrompt, type ClassificationContext, isReservedSymbol } from "./prompts.js";
 
@@ -251,14 +251,14 @@ export function validateMetadata(meta: Metadata, tweet: Tweet): ValidationFailur
         reason: `imageStrategy="remix" but remixInstructions is missing`,
       };
     }
-    if (!tweet.images[0]) {
+    if (!getPrimaryLaunchImage(tweet)) {
       return {
         field: "imageStrategy_consistency",
         reason: `imageStrategy="remix" but the tweet has no image to remix`,
       };
     }
   }
-  if (meta.imageStrategy === "reuse" && !tweet.images[0]) {
+  if (meta.imageStrategy === "reuse" && !getPrimaryLaunchImage(tweet)) {
     return {
       field: "imageStrategy_consistency",
       reason: `imageStrategy="reuse" but the tweet has no image to reuse`,
@@ -290,11 +290,21 @@ export async function generateTokenMetadata(
       classification: options.classification,
       ...(lastFailure ? { previousFailureHint: lastFailure.reason } : {}),
     });
+    const primaryImage = getPrimaryLaunchImage(tweet);
+    const messages: Parameters<typeof generateObject>[0]["messages"] = [
+      {
+        role: "user",
+        content: [
+          { type: "text", text: prompt },
+          ...(primaryImage ? [{ type: "image" as const, image: new URL(primaryImage.url) }] : []),
+        ],
+      },
+    ];
     const start = Date.now();
     const result = await generateObject({
       model: options.model,
       schema: MetadataSchema,
-      prompt,
+      messages,
     });
     const meta = repairMetadata(result.object);
 

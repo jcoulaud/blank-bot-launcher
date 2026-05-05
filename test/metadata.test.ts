@@ -19,6 +19,17 @@ const baseTweet = (withImage = false): Tweet => ({
   isQuoteTweet: false,
 });
 
+const quoteTweetWithImage = (): Tweet => ({
+  ...baseTweet(false),
+  isQuoteTweet: true,
+  quotedTweet: {
+    ...baseTweet(true),
+    id: "q1",
+    authorHandle: "coinnews",
+    images: [{ url: "https://pbs.twimg.com/media/quoted.jpg" }],
+  },
+});
+
 const baseMeta: Metadata = {
   name: "Elon Doge",
   symbol: "EDOGE",
@@ -125,6 +136,19 @@ describe("validateMetadata", () => {
     expect(validateMetadata(meta, baseTweet(true))).toBeNull();
   });
 
+  it("accepts reuse and remix when only the quoted tweet has an image", () => {
+    const reuseMeta: Metadata = { ...baseMeta, imageStrategy: "reuse" };
+    delete (reuseMeta as { imagePrompt?: string }).imagePrompt;
+    expect(validateMetadata(reuseMeta, quoteTweetWithImage())).toBeNull();
+
+    const remixMeta: Metadata = {
+      ...baseMeta,
+      imageStrategy: "remix",
+      remixInstructions: "keep the quoted portrait and apply the tweet joke",
+    };
+    expect(validateMetadata(remixMeta, quoteTweetWithImage())).toBeNull();
+  });
+
   it("accepts a multi-byte name within 32 bytes", () => {
     // 8 four-byte code points = 32 bytes in UTF-8.
     const meta = { ...baseMeta, name: fourByteChar.repeat(8) };
@@ -144,6 +168,24 @@ vi.mock("ai", async (importOriginal) => {
   const mod = (await importOriginal()) as Record<string, unknown>;
   return { ...mod, generateObject: generateObjectMock };
 });
+
+function promptTextFromCall(index: number): string {
+  const arg = generateObjectMock.mock.calls[index]?.[0] as {
+    prompt?: string;
+    messages?: Array<{ content?: Array<{ type?: string; text?: string; image?: unknown }> }>;
+  };
+  if (arg.prompt) return arg.prompt;
+  const content = arg.messages?.[0]?.content ?? [];
+  return content.find((part) => part.type === "text")?.text ?? "";
+}
+
+function callHasImagePart(index: number): boolean {
+  const arg = generateObjectMock.mock.calls[index]?.[0] as {
+    messages?: Array<{ content?: Array<{ type?: string; image?: unknown }> }>;
+  };
+  const content = arg.messages?.[0]?.content ?? [];
+  return content.some((part) => part.type === "image");
+}
 
 describe("generateTokenMetadata retry loop", () => {
   it("returns ok=true on first attempt when validation passes", async () => {
@@ -191,8 +233,7 @@ describe("generateTokenMetadata retry loop", () => {
     expect(result.ok).toBe(true);
     if (result.ok) expect(result.attempts).toBe(2);
     // Second call should have received a prompt mentioning the previous failure
-    const secondCall = generateObjectMock.mock.calls[1]?.[0] as { prompt?: string };
-    expect(secondCall?.prompt).toContain("previous attempt failed");
+    expect(promptTextFromCall(1)).toContain("previous attempt failed");
   });
 
   it("returns ok=false after maxAttempts when both attempts fail", async () => {
@@ -250,5 +291,23 @@ describe("generateTokenMetadata retry loop", () => {
       expect(Buffer.byteLength(result.metadata.name, "utf8")).toBeLessThanOrEqual(32);
       expect(Buffer.byteLength(result.metadata.symbol, "utf8")).toBeLessThanOrEqual(10);
     }
+  });
+
+  it("sends quoted tweet media to the metadata model", async () => {
+    generateObjectMock.mockReset();
+    generateObjectMock.mockResolvedValueOnce({
+      object: {
+        name: "completely grey before launch",
+        symbol: "GREY",
+        imageStrategy: "remix",
+        remixInstructions: "keep the quoted portrait and make the hair grey",
+      },
+    });
+
+    const result = await generateTokenMetadata(quoteTweetWithImage(), metadataOptions());
+
+    expect(result.ok).toBe(true);
+    expect(promptTextFromCall(0)).toContain("Has image: yes (quoted tweet)");
+    expect(callHasImagePart(0)).toBe(true);
   });
 });

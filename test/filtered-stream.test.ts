@@ -134,9 +134,51 @@ describe("parseStreamPayload", () => {
     expect(tweet?.quotedTweet?.authorHandle).toBe("sama");
     expect(tweet?.quotedTweet?.text).toBe("ai is going to be huge");
     expect(tweet?.quotedTweet?.createdAt.toISOString()).toBe("2026-04-30T08:00:00.000Z");
-    // Quoted tweets are not expanded recursively
     expect(tweet?.quotedTweet?.isQuoteTweet).toBe(false);
     expect(tweet?.quotedTweet?.images).toEqual([]);
+  });
+
+  it("expands photo media from quoted tweets", () => {
+    const payload = {
+      data: {
+        id: "1",
+        author_id: "u1",
+        text: "this happens before launch",
+        created_at: "2026-05-01T12:00:00Z",
+        referenced_tweets: [{ type: "quoted", id: "q1" }],
+      },
+      includes: {
+        users: [
+          { id: "u1", username: "founder" },
+          { id: "u2", username: "news" },
+        ],
+        tweets: [
+          {
+            id: "q1",
+            author_id: "u2",
+            text: "quoted news with portrait",
+            created_at: "2026-04-30T08:00:00Z",
+            attachments: { media_keys: ["qm1", "qv1"] },
+          },
+        ],
+        media: [
+          {
+            media_key: "qm1",
+            type: "photo",
+            url: "https://pbs.twimg.com/media/quoted.jpg",
+          },
+          {
+            media_key: "qv1",
+            type: "video",
+            preview_image_url: "https://pbs.twimg.com/media/preview.jpg",
+          },
+        ],
+      },
+    };
+    // biome-ignore lint/suspicious/noExplicitAny: x-api types
+    const tweet = parseStreamPayload(payload as any);
+    expect(tweet?.images).toEqual([]);
+    expect(tweet?.quotedTweet?.images).toEqual([{ url: "https://pbs.twimg.com/media/quoted.jpg" }]);
   });
 
   it("flags quote without populating quotedTweet when includes is missing the quoted tweet", () => {
