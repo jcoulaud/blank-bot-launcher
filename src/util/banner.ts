@@ -16,11 +16,13 @@ export function buildBannerLines(args: BannerArgs): string[] {
     ? `BACKTEST ${flags.backtestLimit}/account  (dry-run, isolated DB)`
     : flags.dryRun
       ? "DRY-RUN  (no SDK calls)"
-      : flags.checkConfig
-        ? "CHECK-CONFIG"
-        : flags.replayTweetId
-          ? `REPLAY ${flags.replayTweetId}`
-          : "LIVE";
+      : flags.dashboardOnly
+        ? "DASHBOARD-ONLY"
+        : flags.checkConfig
+          ? "CHECK-CONFIG"
+          : flags.replayTweetId
+            ? `REPLAY ${flags.replayTweetId}`
+            : "LIVE";
   const dashLine = "=".repeat(56);
   return [
     dashLine,

@@ -9,6 +9,7 @@ export type CliFlags = {
   backtestLimit: number;
   backtestDbPath?: string;
   backtestReportPath?: string;
+  dashboardOnly: boolean;
   replayTweetId?: string;
   yes: boolean;
   force: boolean;
@@ -33,6 +34,7 @@ export function parseCliFlags(argv: string[]): CliFlags {
         "backtest-limit": { type: "string" },
         "backtest-db": { type: "string" },
         "backtest-report": { type: "string" },
+        "dashboard-only": { type: "boolean", default: false },
         yes: { type: "boolean", short: "y", default: false },
         force: { type: "boolean", default: false },
         replay: { type: "string" },
@@ -50,6 +52,7 @@ export function parseCliFlags(argv: string[]): CliFlags {
     dryRun: Boolean(values["dry-run"]),
     backtest: Boolean(values.backtest),
     backtestLimit: parsePositiveIntFlag(values["backtest-limit"], "--backtest-limit") ?? 50,
+    dashboardOnly: Boolean(values["dashboard-only"]),
     yes: Boolean(values.yes),
     force: Boolean(values.force),
     help: Boolean(values.help),
@@ -67,6 +70,11 @@ export function parseCliFlags(argv: string[]): CliFlags {
   if (flags.backtest && flags.replayTweetId) {
     throw new CliFlagsError("--backtest cannot be combined with --replay.");
   }
+  if (flags.dashboardOnly && (flags.backtest || flags.replayTweetId || flags.checkConfig)) {
+    throw new CliFlagsError(
+      "--dashboard-only cannot be combined with --backtest, --replay, or --check-config.",
+    );
+  }
   if (!flags.backtest) {
     if (flags.backtestDbPath) throw new CliFlagsError("--backtest-db requires --backtest.");
     if (flags.backtestReportPath) throw new CliFlagsError("--backtest-report requires --backtest.");
@@ -78,7 +86,13 @@ export function parseCliFlags(argv: string[]): CliFlags {
   // --force on a live run would bypass dedup and the classifier threshold
   // and start launching at the per-day cap, so restrict it to --replay,
   // --dry-run, and --backtest where there's no live spend.
-  if (flags.force && !flags.replayTweetId && !flags.dryRun && !flags.backtest) {
+  if (
+    flags.force &&
+    !flags.replayTweetId &&
+    !flags.dryRun &&
+    !flags.backtest &&
+    !flags.dashboardOnly
+  ) {
     throw new CliFlagsError(
       "--force requires --replay or --dry-run. Refusing to start a live run with --force.",
     );
@@ -110,6 +124,8 @@ Usage:
                                 (X may return one extra page before reaching N)
   npm run start -- --replay <id>
                                 fetch one tweet by id and run it through the pipeline
+  npm run start -- --dashboard-only
+                                serve the local dashboard without connecting to X
   npm run start -- --force      bypass the dedup check and the classifier threshold
                                   (only valid with --replay, --dry-run, or --backtest)
   npm run check-config          validate env, accounts, wallet balance, then exit

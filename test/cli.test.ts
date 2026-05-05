@@ -37,6 +37,7 @@ describe("parseCliFlags", () => {
     expect(flags.dryRun).toBe(false);
     expect(flags.backtest).toBe(false);
     expect(flags.backtestLimit).toBe(50);
+    expect(flags.dashboardOnly).toBe(false);
     expect(flags.yes).toBe(false);
     expect(flags.force).toBe(false);
     expect(flags.replayTweetId).toBeUndefined();
@@ -71,6 +72,10 @@ describe("parseCliFlags", () => {
 
   it("parses --check-config", () => {
     expect(parseCliFlags(["--check-config"]).checkConfig).toBe(true);
+  });
+
+  it("parses --dashboard-only", () => {
+    expect(parseCliFlags(["--dashboard-only"]).dashboardOnly).toBe(true);
   });
 
   it("parses --yes / -y", () => {
@@ -114,5 +119,11 @@ describe("parseCliFlags", () => {
 
   it("rejects --backtest with --replay", () => {
     expect(() => parseCliFlags(["--backtest", "--replay", "123"])).toThrow(CliFlagsError);
+  });
+
+  it("rejects --dashboard-only with source modes", () => {
+    expect(() => parseCliFlags(["--dashboard-only", "--backtest"])).toThrow(CliFlagsError);
+    expect(() => parseCliFlags(["--dashboard-only", "--replay", "123"])).toThrow(CliFlagsError);
+    expect(() => parseCliFlags(["--dashboard-only", "--check-config"])).toThrow(CliFlagsError);
   });
 });

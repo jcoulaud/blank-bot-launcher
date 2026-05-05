@@ -36,6 +36,7 @@ const flags: CliFlags = {
   dryRun: false,
   backtest: false,
   backtestLimit: 50,
+  dashboardOnly: false,
   yes: true,
   force: false,
   help: false,
@@ -98,6 +99,7 @@ describe("buildBannerLines", () => {
   it.each([
     [{ ...flags, backtest: true, backtestLimit: 25 }, "BACKTEST 25/account"],
     [{ ...flags, dryRun: true }, "DRY-RUN"],
+    [{ ...flags, dashboardOnly: true }, "DASHBOARD-ONLY"],
     [{ ...flags, checkConfig: true }, "CHECK-CONFIG"],
     [{ ...flags, replayTweetId: "1234" }, "REPLAY 1234"],
     [flags, "LIVE"],

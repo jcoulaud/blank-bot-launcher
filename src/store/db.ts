@@ -3,6 +3,12 @@ import { dirname, resolve } from "node:path";
 import Database, { type Database as DB } from "better-sqlite3";
 import { z } from "zod";
 import { FLOAT_EPS_SOL } from "../config.js";
+import {
+  uniqueUsageResources,
+  X_API_USAGE_RESOURCE_TYPES,
+  type XApiUsageResource,
+  type XApiUsageResourceType,
+} from "../util/x-api-cost.js";
 
 const SCHEMA_SQL = `
 CREATE TABLE IF NOT EXISTS tweets_seen (
@@ -37,6 +43,19 @@ CREATE TABLE IF NOT EXISTS daily_counters (
   launches_count INTEGER NOT NULL DEFAULT 0,
   sol_spent REAL NOT NULL DEFAULT 0
 );
+
+CREATE TABLE IF NOT EXISTS x_api_usage_resources (
+  date TEXT NOT NULL,
+  resource_type TEXT NOT NULL,
+  resource_id TEXT NOT NULL,
+  source TEXT NOT NULL,
+  first_seen_at INTEGER NOT NULL,
+  last_seen_at INTEGER NOT NULL,
+  seen_count INTEGER NOT NULL DEFAULT 1,
+  cost_usd REAL NOT NULL,
+  PRIMARY KEY (date, resource_type, resource_id)
+);
+CREATE INDEX IF NOT EXISTS idx_x_api_usage_date ON x_api_usage_resources(date);
 `;
 
 // Schemas validate every row read from SQLite. This catches schema drift,
@@ -83,6 +102,14 @@ const DailyCounterSchema = z.object({
   sol_spent: z.number(),
 });
 
+const XApiUsageResourceTypeSchema = z.enum(X_API_USAGE_RESOURCE_TYPES);
+
+const XApiUsageSummaryRowSchema = z.object({
+  resource_type: XApiUsageResourceTypeSchema,
+  resources: z.number(),
+  cost_usd: z.number(),
+});
+
 export type Decision = z.infer<typeof DecisionSchema>;
 // On read (z.output) seen_count is always present; on write (z.input) it's
 // optional because `.default(1)` fills it in.
@@ -90,6 +117,21 @@ export type SeenTweet = z.output<typeof SeenTweetSchema>;
 export type SeenTweetInput = z.input<typeof SeenTweetSchema>;
 export type LaunchRecord = z.infer<typeof LaunchRecordSchema>;
 export type DailyCounter = z.infer<typeof DailyCounterSchema>;
+export type XApiUsageSummaryLine = {
+  resource_type: XApiUsageResourceType;
+  resources: number;
+  cost_usd: number;
+};
+export type XApiUsageTotals = {
+  resources: number;
+  cost_usd: number;
+  by_type: XApiUsageSummaryLine[];
+};
+export type XApiUsageSummary = {
+  date: string;
+  today: XApiUsageTotals;
+  total: XApiUsageTotals;
+};
 export type LaunchReservation = {
   date: string;
   plannedSpendSol: number;
@@ -309,6 +351,48 @@ export class Store {
     return { date, launches_count: totals.launches_count, sol_spent: totals.sol_spent };
   }
 
+  recordXApiUsage(args: {
+    timestampMs: number;
+    source: string;
+    resources: readonly XApiUsageResource[];
+  }): void {
+    const resources = uniqueUsageResources(args.resources);
+    if (resources.length === 0) return;
+
+    const date = isoDateUtc(args.timestampMs);
+    const insert = this.db.prepare(
+      `INSERT INTO x_api_usage_resources
+       (date, resource_type, resource_id, source, first_seen_at, last_seen_at, seen_count, cost_usd)
+       VALUES (?, ?, ?, ?, ?, ?, 1, ?)
+       ON CONFLICT(date, resource_type, resource_id) DO UPDATE SET
+         last_seen_at = excluded.last_seen_at,
+         seen_count = x_api_usage_resources.seen_count + 1`,
+    );
+
+    this.db.transaction(() => {
+      for (const resource of resources) {
+        insert.run(
+          date,
+          resource.resource_type,
+          resource.resource_id,
+          args.source,
+          args.timestampMs,
+          args.timestampMs,
+          resource.cost_usd,
+        );
+      }
+    })();
+  }
+
+  getXApiUsageSummary(timestampMs: number): XApiUsageSummary {
+    const date = isoDateUtc(timestampMs);
+    return {
+      date,
+      today: this.xApiUsageTotals("WHERE date = ?", [date]),
+      total: this.xApiUsageTotals("", []),
+    };
+  }
+
   lastLaunchByAuthor(authorHandle: string): LaunchRecord | null {
     const row = this.db
       .prepare("SELECT * FROM launches WHERE source_author = ? ORDER BY launched_at DESC LIMIT 1")
@@ -347,6 +431,24 @@ export class Store {
 
   close(): void {
     this.db.close();
+  }
+
+  private xApiUsageTotals(whereSql: string, params: unknown[]): XApiUsageTotals {
+    const rows = this.db
+      .prepare(
+        `SELECT resource_type, COUNT(*) AS resources, COALESCE(SUM(cost_usd), 0) AS cost_usd
+         FROM x_api_usage_resources
+         ${whereSql}
+         GROUP BY resource_type
+         ORDER BY resource_type`,
+      )
+      .all(...params);
+    const byType = parseRows(XApiUsageSummaryRowSchema, rows);
+    return {
+      resources: byType.reduce((sum, row) => sum + row.resources, 0),
+      cost_usd: byType.reduce((sum, row) => sum + row.cost_usd, 0),
+      by_type: byType,
+    };
   }
 }
 

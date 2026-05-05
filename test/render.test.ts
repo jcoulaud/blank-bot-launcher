@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { formatReason, pillClass } from "../src/dashboard/render.js";
+import { formatReason, formatUsd, pillClass } from "../src/dashboard/render.js";
 import type { Decision } from "../src/store/db.js";
 
 describe("formatReason", () => {
@@ -61,5 +61,16 @@ describe("pillClass", () => {
     ]);
     // Sanity check the switch is not collapsing branches.
     expect(new Set(classes).size).toBe(decisions.length);
+  });
+});
+
+describe("formatUsd", () => {
+  it("keeps sub-cent X API unit costs visible", () => {
+    expect(formatUsd(0.005)).toBe("$0.005");
+    expect(formatUsd(0.01)).toBe("$0.010");
+  });
+
+  it("uses cents for larger totals", () => {
+    expect(formatUsd(1.2)).toBe("$1.20");
   });
 });

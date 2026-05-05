@@ -31,13 +31,13 @@ a:hover,a:focus{text-decoration:underline}
 }
 .wordmark{
   display:flex;align-items:center;gap:8px;
-  font-weight:700;font-size:16px;color:var(--ink);letter-spacing:-0.2px;
+  font-weight:700;font-size:16px;color:var(--ink);letter-spacing:0;
 }
 .wordmark .mascot{width:22px;height:22px;display:block}
 .eyebrow-pill{
   margin-left:4px;padding:4px 10px;border-radius:9999px;
   background:var(--surface-soft);color:var(--body);
-  font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:0.04em;
+  font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:0;
 }
 .nav-spacer{flex:1}
 .nav-meta{font-size:13px;color:var(--mute)}
@@ -45,20 +45,27 @@ a:hover,a:focus{text-decoration:underline}
 /* container */
 .container{max-width:1100px;margin:0 auto;padding:48px 24px 24px}
 .section{margin-top:64px}
+.section-tight{margin-top:24px}
 
 /* type */
 .eyebrow{
-  font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;
+  font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:0;
   color:var(--mute);margin:0 0 12px;
 }
 .display{
-  font-size:36px;font-weight:800;line-height:1.2;letter-spacing:-0.6px;
+  font-size:36px;font-weight:800;line-height:1.2;letter-spacing:0;
   color:var(--ink);margin:0 0 16px;
 }
 .h2{
-  font-size:21px;font-weight:700;line-height:1.4;letter-spacing:-0.5px;
+  font-size:21px;font-weight:700;line-height:1.4;letter-spacing:0;
   color:var(--ink);margin:0 0 16px;
 }
+.heading-link{
+  display:inline-flex;align-items:center;justify-content:center;
+  width:24px;height:24px;margin-left:4px;vertical-align:-4px;
+  color:var(--mute);border-radius:4px;text-decoration:none;
+}
+.heading-link:hover,.heading-link:focus{color:var(--link-teal);text-decoration:none}
 .lede{font-size:16px;color:var(--body);margin:0;max-width:720px}
 .mute{color:var(--mute)}
 .num{font-variant-numeric:tabular-nums}
@@ -73,16 +80,17 @@ a:hover,a:focus{text-decoration:underline}
 
 /* stats grid */
 .stats{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin-top:16px}
+.stats-dashboard{grid-template-columns:repeat(4,1fr)}
 .stat{
   background:var(--surface-card);border:1px solid var(--hairline);
   border-radius:6px;padding:20px 24px;
 }
 .stat-label{
-  font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;
+  font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:0;
   color:var(--mute);margin:0 0 8px;
 }
 .stat-value{
-  font-size:28px;font-weight:800;letter-spacing:-0.6px;
+  font-size:28px;font-weight:800;letter-spacing:0;
   color:var(--ink);margin:0;font-variant-numeric:tabular-nums;
 }
 .stat-value-sm{font-size:18px}
@@ -93,11 +101,12 @@ a:hover,a:focus{text-decoration:underline}
   background:var(--surface-card);border:1px solid var(--hairline);
   border-radius:6px;overflow:hidden;
 }
+.table-note{font-size:13px;color:var(--mute);margin:12px 0 0}
 .table-scroll{overflow-x:auto}
 table{width:100%;border-collapse:collapse;font-size:14px}
 thead th{
   text-align:left;padding:14px 12px;
-  font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;
+  font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:0;
   color:var(--mute);background:var(--surface-card);
   border-bottom:1px solid var(--hairline);white-space:nowrap;
 }
@@ -138,7 +147,7 @@ th:last-child,td:last-child{padding-right:24px}
 /* pills */
 .pill{
   display:inline-block;padding:3px 10px;border-radius:9999px;
-  font-size:12px;font-weight:600;letter-spacing:0.02em;white-space:nowrap;
+  font-size:12px;font-weight:600;letter-spacing:0;white-space:nowrap;
 }
 .pill-launched{background:var(--accent-green-soft);color:var(--accent-green)}
 .pill-dry-run{background:var(--accent-purple-soft);color:var(--accent-purple)}
@@ -224,7 +233,7 @@ code,.code-inline{
   .nav{padding:0 16px}
   .nav-meta{display:none}
   .display{font-size:28px}
-  .stats{grid-template-columns:1fr}
+  .stats,.stats-dashboard{grid-template-columns:1fr}
   .col-reason{max-width:none}
 }
 `;

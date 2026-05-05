@@ -2,6 +2,11 @@ import { type TweetV2, TwitterApi } from "twitter-api-v2";
 import type { Accounts } from "../config.js";
 import { getLogger } from "../logger.js";
 import { errMsg } from "../util/errors.js";
+import {
+  type XApiUsageRecorder,
+  xApiReadResourcesFromPayload,
+  xApiUserReadResources,
+} from "../util/x-api-cost.js";
 import { parseStreamPayload, type StreamPayloadLike } from "./filtered-stream.js";
 import type { Tweet, TweetHandler, TweetSource } from "./tweet-source.js";
 
@@ -15,6 +20,7 @@ export type HistoricalTimelineOptions = {
   accounts: Accounts;
   perAccountLimit: number;
   onPipelineError?: (tweet: Tweet, err: unknown) => void;
+  onUsage?: XApiUsageRecorder;
 };
 
 type TimelinePaginatorPage = {
@@ -93,6 +99,7 @@ export class HistoricalTimelineSource implements TweetSource {
     const resolved: Array<{ id: string; username: string }> = [];
     for (const batch of chunk(handles, USER_LOOKUP_BATCH_SIZE)) {
       const lookup = await this.client.usersByUsernames(batch, { "user.fields": ["username"] });
+      this.options.onUsage?.(xApiUserReadResources(lookup.data ?? []), "historical_user_lookup");
       const byLower = new Map((lookup.data ?? []).map((u) => [u.username.toLowerCase(), u]));
       for (const handle of batch) {
         const user = byLower.get(handle.toLowerCase());
@@ -131,6 +138,10 @@ export class HistoricalTimelineSource implements TweetSource {
     // break, so a single backtest run can cost more than ceil(limit/page) X
     // API calls. Keep limit small if you're sensitive to X rate caps.
     for await (const [data, page] of paginator.fetchAndIterate()) {
+      this.options.onUsage?.(
+        xApiReadResourcesFromPayload({ data, includes: page.data.includes }),
+        "historical_timeline",
+      );
       const tweet = parseTimelineTweet(data, page.data.includes);
       if (!tweet) {
         log.warn({ tweet_id: data.id, author_handle: handle }, "timeline tweet could not parse");

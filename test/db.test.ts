@@ -127,6 +127,50 @@ describe("Store", () => {
     expect(committedCounter.sol_spent).toBe(0);
   });
 
+  it("records X API usage with UTC-day resource deduplication", () => {
+    const t = Date.UTC(2026, 4, 1, 12, 0, 0);
+    store.recordXApiUsage({
+      timestampMs: t,
+      source: "test",
+      resources: [
+        { resource_type: "post_read", resource_id: "tweet-1", cost_usd: 0.005 },
+        { resource_type: "user_read", resource_id: "user-1", cost_usd: 0.01 },
+      ],
+    });
+    store.recordXApiUsage({
+      timestampMs: t + 60_000,
+      source: "test",
+      resources: [
+        { resource_type: "post_read", resource_id: "tweet-1", cost_usd: 0.005 },
+        { resource_type: "media_read", resource_id: "media-1", cost_usd: 0.005 },
+      ],
+    });
+
+    const summary = store.getXApiUsageSummary(t);
+    expect(summary.date).toBe("2026-05-01");
+    expect(summary.today.resources).toBe(3);
+    expect(summary.today.cost_usd).toBeCloseTo(0.02);
+    expect(summary.today.by_type).toEqual([
+      { resource_type: "media_read", resources: 1, cost_usd: 0.005 },
+      { resource_type: "post_read", resources: 1, cost_usd: 0.005 },
+      { resource_type: "user_read", resources: 1, cost_usd: 0.01 },
+    ]);
+  });
+
+  it("charges the same X API resource again after the UTC day changes", () => {
+    const dayOne = Date.UTC(2026, 4, 1, 23, 59, 0);
+    const dayTwo = Date.UTC(2026, 4, 2, 0, 1, 0);
+    const resource = [
+      { resource_type: "post_read" as const, resource_id: "tweet-1", cost_usd: 0.005 },
+    ];
+    store.recordXApiUsage({ timestampMs: dayOne, source: "test", resources: resource });
+    store.recordXApiUsage({ timestampMs: dayTwo, source: "test", resources: resource });
+
+    expect(store.getXApiUsageSummary(dayOne).today.cost_usd).toBeCloseTo(0.005);
+    expect(store.getXApiUsageSummary(dayTwo).today.cost_usd).toBeCloseTo(0.005);
+    expect(store.getXApiUsageSummary(dayTwo).total.cost_usd).toBeCloseTo(0.01);
+  });
+
   it("lastLaunchByAuthor returns the most recent", () => {
     const base = 1_700_000_000_000;
     for (let i = 0; i < 3; i++) {

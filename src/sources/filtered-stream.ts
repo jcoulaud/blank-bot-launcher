@@ -2,6 +2,7 @@ import { ETwitterStreamEvent, type TweetV2SingleStreamResult, TwitterApi } from 
 import type { Accounts } from "../config.js";
 import { getLogger } from "../logger.js";
 import { errMsg } from "../util/errors.js";
+import { type XApiUsageRecorder, xApiReadResourcesFromPayload } from "../util/x-api-cost.js";
 import { ALLOWED_IMAGE_HOSTS } from "../util/x-hosts.js";
 import type { Tweet, TweetHandler, TweetMedia, TweetSource } from "./tweet-source.js";
 
@@ -20,6 +21,7 @@ export type FilteredStreamOptions = {
    * doesn't reprocess it after a restart.
    */
   onPipelineError?: (tweet: Tweet, err: unknown) => void;
+  onUsage?: XApiUsageRecorder;
 };
 
 export class FilteredStreamSource implements TweetSource {
@@ -95,6 +97,7 @@ export class FilteredStreamSource implements TweetSource {
 
     this.stream.on(ETwitterStreamEvent.Data, async (payload) => {
       if (this.stopping) return;
+      this.options.onUsage?.(xApiReadResourcesFromPayload(payload), "filtered_stream");
       let tweet: Tweet | null;
       try {
         tweet = parseStreamPayload(payload);

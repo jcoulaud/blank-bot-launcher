@@ -79,6 +79,7 @@ npm run dev -- --dry-run              # local run without launching
 npm run start                         # live run
 npm run backtest                      # dry-run recent tweets from followed accounts
 npm run backtest -- --backtest-limit 25
+npm run start -- --dashboard-only      # serve dashboard from local DB, no X connection
 npm run check-config                  # validate env, accounts, caps, and wallet balance
 npm run build                         # TypeScript check for src
 npm run check                         # TypeScript + Biome for src, tests, and scripts
@@ -121,6 +122,8 @@ disposable.
   lose.
 - Run `--dry-run` first and inspect the SQLite records before going live.
 - The local dashboard binds to `127.0.0.1` only.
+- The dashboard estimates X API read spend from returned Post, User, and Media
+  resources. The X Developer Console remains the source of truth for billing.
 
 ## Crash recovery
 

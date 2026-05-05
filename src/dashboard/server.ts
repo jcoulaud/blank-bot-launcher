@@ -101,6 +101,7 @@ export function startDashboard(options: DashboardOptions): { close: () => Promis
   app.get("/", async (req: Request, res: Response) => {
     const now = Date.now();
     const counter = options.store.getCommittedDailyCounter(now);
+    const xApiUsage = options.store.getXApiUsageSummary(now);
     // The reserved counter includes in-flight launches that haven't yet
     // committed (mid-IPFS, mid-launch). The safety gate checks against this
     // value, so the dashboard surfaces it too: an operator looking at
@@ -124,6 +125,7 @@ export function startDashboard(options: DashboardOptions): { close: () => Promis
     res.type("html").send(
       renderHome({
         counter,
+        xApiUsage,
         openReservations,
         reservedSolPending,
         seen,

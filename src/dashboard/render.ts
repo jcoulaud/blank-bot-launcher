@@ -2,7 +2,13 @@ import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { ExternalLink } from "lucide-static";
-import type { Decision, LaunchRecord, SeenTweet } from "../store/db.js";
+import type { Decision, LaunchRecord, SeenTweet, XApiUsageSummary } from "../store/db.js";
+import {
+  X_API_PRICING_DOC_URL,
+  X_API_USAGE_RESOURCE_TYPES,
+  xApiUsageResourceLabel,
+  xApiUsageUnitCostUsd,
+} from "../util/x-api-cost.js";
 import { STYLES } from "./styles.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -65,6 +71,7 @@ export function layout(title: string, body: string, navMeta?: string): string {
 
 export function renderHome(args: {
   counter: { date: string; launches_count: number; sol_spent: number };
+  xApiUsage: XApiUsageSummary;
   openReservations?: number;
   reservedSolPending?: number;
   seen: SeenTweet[];
@@ -104,6 +111,7 @@ export function renderHome(args: {
         </tr>`,
     )
     .join("");
+  const xApiCostRows = renderXApiCostRows(args.xApiUsage);
 
   const body = `
     <h1 class="display">Live launcher status.</h1>
@@ -115,7 +123,7 @@ export function renderHome(args: {
         <div class="block">
           <pre class="code-block code-block-with-link"><span class="code-text">${esc(args.walletPubkey)}</span><a class="code-link-inline" href="https://orbmarkets.io/address/${esc(args.walletPubkey)}" target="_blank" rel="noopener noreferrer" aria-label="Open wallet on Orb Markets" title="Open on Orb Markets">${EXTERNAL_LINK_ICON}</a></pre>
         </div>
-        <div class="stats">
+        <div class="stats stats-dashboard">
           <div class="stat">
             <p class="stat-label">Balance</p>
             <p class="stat-value">${args.balanceSol.toFixed(2)}</p>
@@ -137,8 +145,28 @@ export function renderHome(args: {
                 : ""
             }</p>
           </div>
+          <div class="stat">
+            <p class="stat-label">X API today</p>
+            <p class="stat-value">${formatUsd(args.xApiUsage.today.cost_usd)}</p>
+            <p class="stat-detail">${args.xApiUsage.today.resources} billable reads</p>
+          </div>
         </div>
       </div>
+    </div>
+
+    <div class="section section-tight">
+      <h2 class="h2" id="x-api-cost">X API estimate <a class="heading-link" href="${esc(X_API_PRICING_DOC_URL)}" target="_blank" rel="noopener noreferrer" aria-label="Open X API pricing" title="Open X API pricing">${EXTERNAL_LINK_ICON}</a></h2>
+      <div class="table-card">
+        <div class="table-scroll">
+          <table>
+            <thead><tr>
+              <th>Resource</th><th class="col-num">Today</th><th class="col-num">Unit</th><th class="col-num">Today cost</th><th class="col-num">Total cost</th>
+            </tr></thead>
+            <tbody>${xApiCostRows}</tbody>
+          </table>
+        </div>
+      </div>
+      <p class="table-note">Standard read-rate estimate, deduplicated by resource inside each UTC day. Current billing and credit balance remain in the X Developer Console.</p>
     </div>
 
     <div class="section">
@@ -322,6 +350,27 @@ function renderPager(args: {
   </div>`;
 }
 
+function renderXApiCostRows(summary: XApiUsageSummary): string {
+  return X_API_USAGE_RESOURCE_TYPES.map((resourceType) => {
+    const today = findUsageLine(summary.today.by_type, resourceType);
+    const total = findUsageLine(summary.total.by_type, resourceType);
+    return `<tr>
+      <td>${esc(xApiUsageResourceLabel(resourceType))}</td>
+      <td class="col-num">${today.resources}</td>
+      <td class="col-num">${formatUsd(xApiUsageUnitCostUsd(resourceType))}</td>
+      <td class="col-num">${formatUsd(today.cost_usd)}</td>
+      <td class="col-num">${formatUsd(total.cost_usd)}</td>
+    </tr>`;
+  }).join("");
+}
+
+function findUsageLine(
+  lines: XApiUsageSummary["today"]["by_type"],
+  resourceType: (typeof X_API_USAGE_RESOURCE_TYPES)[number],
+): { resources: number; cost_usd: number } {
+  return lines.find((line) => line.resource_type === resourceType) ?? { resources: 0, cost_usd: 0 };
+}
+
 function tweetUrl(authorHandle: string, tweetId: string): string {
   return `https://x.com/${encodeURIComponent(authorHandle)}/status/${encodeURIComponent(tweetId)}`;
 }
@@ -367,6 +416,17 @@ export function formatSol(sol: number): string {
   const fraction = lamports % LAMPORTS_PER_SOL_EXACT;
   if (fraction === 0) return `${whole}`;
   return `${whole}.${fraction.toString().padStart(9, "0").replace(/0+$/, "")}`;
+}
+
+export function formatUsd(value: number): string {
+  if (!Number.isFinite(value) || value < 0) return "$0.00";
+  const precision = value > 0 && value < 1 ? 3 : 2;
+  return new Intl.NumberFormat("en-US", {
+    style: "currency",
+    currency: "USD",
+    minimumFractionDigits: precision,
+    maximumFractionDigits: precision,
+  }).format(value);
 }
 
 export function esc(s: string): string {

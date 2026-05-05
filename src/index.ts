@@ -27,6 +27,7 @@ import { Store } from "./store/db.js";
 import { fetchBalanceWithRetry } from "./util/balance.js";
 import { printBanner } from "./util/banner.js";
 import { errMsg } from "./util/errors.js";
+import { type XApiUsageRecorder, xApiReadResourcesFromPayload } from "./util/x-api-cost.js";
 
 async function main(): Promise<void> {
   let flags: CliFlags;
@@ -55,8 +56,15 @@ async function main(): Promise<void> {
     throw err;
   }
   const { env, accounts } = config;
-  const effectiveDryRun = flags.dryRun || flags.backtest;
+  const effectiveDryRun = flags.dryRun || flags.backtest || flags.dashboardOnly;
   const backtestStartedAt = new Date();
+
+  if (flags.dashboardOnly && !env.DASHBOARD_PORT) {
+    console.error(
+      "\n--dashboard-only requires DASHBOARD_PORT in .env, for example DASHBOARD_PORT=3000.\n",
+    );
+    process.exit(1);
+  }
 
   const wallet = loadKeypair(env.SOLANA_PRIVATE_KEY);
   const connection = new Connection(env.RPC_URL, "confirmed");
@@ -108,6 +116,17 @@ async function main(): Promise<void> {
     : env.DB_PATH;
   const store = new Store(storePath);
   const llmModel = google(env.LLM_MODEL);
+  const recordXApiUsage: XApiUsageRecorder = (resources, source) => {
+    try {
+      store.recordXApiUsage({
+        timestampMs: Date.now(),
+        source,
+        resources,
+      });
+    } catch (err) {
+      rootLogger.error({ err: errMsg(err), source }, "recordXApiUsage failed");
+    }
+  };
 
   const blankClient: BlankClient | null = effectiveDryRun
     ? null
@@ -121,6 +140,32 @@ async function main(): Promise<void> {
         wallet,
       })
     : undefined;
+
+  if (flags.dashboardOnly) {
+    rootLogger.info(
+      { port: env.DASHBOARD_PORT, db_path: storePath },
+      "dashboard-only mode; skipping X source startup",
+    );
+    const shutdownDashboardOnly = async (signal: string) => {
+      rootLogger.info({ signal }, "dashboard-only shutdown initiated");
+      await dashboard
+        ?.close()
+        .catch((err) => rootLogger.error({ err: errMsg(err) }, "dashboard close failed"));
+      try {
+        store.close();
+      } catch (err) {
+        rootLogger.error({ err: errMsg(err) }, "store.close failed");
+      }
+      rootLogger.info("dashboard-only shutdown complete");
+      process.exit(0);
+    };
+    process.on("SIGTERM", () => void shutdownDashboardOnly("SIGTERM"));
+    process.on("SIGINT", () => void shutdownDashboardOnly("SIGINT"));
+    await new Promise<void>(() => {
+      /* keep the loopback dashboard alive until SIGINT/SIGTERM */
+    });
+    return;
+  }
 
   const pipelineMutex = new Mutex();
   const backtestEntries: BacktestReportEntry[] = [];
@@ -165,7 +210,11 @@ async function main(): Promise<void> {
   // --backtest uses user timelines instead of the live filtered stream.
   let source: TweetSource;
   if (flags.replayTweetId) {
-    const tweet = await fetchSingleTweetForReplay(flags.replayTweetId, env.X_BEARER_TOKEN);
+    const tweet = await fetchSingleTweetForReplay(
+      flags.replayTweetId,
+      env.X_BEARER_TOKEN,
+      recordXApiUsage,
+    );
     const mock = new MockTweetSource();
     mock.enqueue(tweet);
     source = mock;
@@ -175,6 +224,7 @@ async function main(): Promise<void> {
       accounts,
       perAccountLimit: flags.backtestLimit,
       onPipelineError: recordPipelineError,
+      onUsage: recordXApiUsage,
     });
   } else {
     source = new FilteredStreamSource({
@@ -182,6 +232,7 @@ async function main(): Promise<void> {
       accounts,
       ignoreBefore: Date.now() - env.SKIP_OLDER_THAN_S * 1000,
       onPipelineError: recordPipelineError,
+      onUsage: recordXApiUsage,
     });
   }
 
@@ -277,11 +328,15 @@ async function main(): Promise<void> {
  * "X API call failed" so a user replaying a tweet they know exists with
  * a stale token does not chase the wrong cause.
  */
-async function fetchSingleTweetForReplay(id: string, bearerToken: string): Promise<Tweet> {
+async function fetchSingleTweetForReplay(
+  id: string,
+  bearerToken: string,
+  onUsage: XApiUsageRecorder,
+): Promise<Tweet> {
   const log = getLogger({ replay_id: id });
   let tweet: Tweet | null;
   try {
-    tweet = await fetchSingleTweet(id, bearerToken);
+    tweet = await fetchSingleTweet(id, bearerToken, onUsage);
   } catch (err) {
     log.error({ err: errMsg(err) }, "X API call failed during --replay fetch");
     console.error(`\nX API call failed: ${errMsg(err)}\nCheck X_BEARER_TOKEN and tweet id.\n`);
@@ -297,7 +352,11 @@ async function fetchSingleTweetForReplay(id: string, bearerToken: string): Promi
   return tweet;
 }
 
-async function fetchSingleTweet(id: string, bearerToken: string): Promise<Tweet | null> {
+async function fetchSingleTweet(
+  id: string,
+  bearerToken: string,
+  onUsage: XApiUsageRecorder,
+): Promise<Tweet | null> {
   const client = new TwitterApi(bearerToken);
   const single = await client.v2.singleTweet(id, {
     "tweet.fields": ["author_id", "created_at", "attachments", "referenced_tweets"],
@@ -305,6 +364,7 @@ async function fetchSingleTweet(id: string, bearerToken: string): Promise<Tweet 
     "media.fields": ["url", "type", "preview_image_url"],
     "user.fields": ["username"],
   });
+  onUsage(xApiReadResourcesFromPayload({ data: single.data, includes: single.includes }), "replay");
   // Reuse the streaming parser.
   return parseStreamPayload({ data: single.data, includes: single.includes });
 }
