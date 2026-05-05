@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { formatReason, formatUsd, pillClass } from "../src/dashboard/render.js";
+import {
+  formatReason,
+  formatSolThreeDecimals,
+  formatSolTwoDecimals,
+  formatUsd,
+  pillClass,
+} from "../src/dashboard/render.js";
 import type { Decision } from "../src/store/db.js";
 
 describe("formatReason", () => {
@@ -72,5 +78,21 @@ describe("formatUsd", () => {
 
   it("uses cents for larger totals", () => {
     expect(formatUsd(1.2)).toBe("$1.20");
+  });
+});
+
+describe("formatSolTwoDecimals", () => {
+  it("always renders recent launch costs with two decimal places", () => {
+    expect(formatSolTwoDecimals(1)).toBe("1.00");
+    expect(formatSolTwoDecimals(0.0123)).toBe("0.01");
+    expect(formatSolTwoDecimals(0)).toBe("0.00");
+  });
+});
+
+describe("formatSolThreeDecimals", () => {
+  it("renders dashboard SOL spent values with three decimal places", () => {
+    expect(formatSolThreeDecimals(1)).toBe("1.000");
+    expect(formatSolThreeDecimals(0.094613495)).toBe("0.095");
+    expect(formatSolThreeDecimals(0)).toBe("0.000");
   });
 });

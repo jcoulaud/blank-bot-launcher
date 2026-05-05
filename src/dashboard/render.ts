@@ -94,7 +94,7 @@ export function renderHome(args: {
           <td>${esc(l.name)}</td>
           <td class="col-author">${authorTweetLink(l.source_author, l.source_tweet_id)}</td>
           <td class="col-when">${esc(formatTime(l.launched_at))}</td>
-          <td class="col-num">${formatSol(l.sol_spent)} SOL</td>
+          <td class="col-num">${formatSolTwoDecimals(l.sol_spent)} SOL</td>
         </tr>`,
     )
     .join("");
@@ -138,10 +138,10 @@ export function renderHome(args: {
           </div>
           <div class="stat">
             <p class="stat-label">SOL spent today</p>
-            <p class="stat-value">${formatSol(args.counter.sol_spent)}</p>
+            <p class="stat-value">${formatSolThreeDecimals(args.counter.sol_spent)}</p>
             <p class="stat-detail">SOL${
               args.reservedSolPending && args.reservedSolPending > 0
-                ? ` (+${formatSol(args.reservedSolPending)} reserved)`
+                ? ` (+${formatSolThreeDecimals(args.reservedSolPending)} reserved)`
                 : ""
             }</p>
           </div>
@@ -416,6 +416,19 @@ export function formatSol(sol: number): string {
   const fraction = lamports % LAMPORTS_PER_SOL_EXACT;
   if (fraction === 0) return `${whole}`;
   return `${whole}.${fraction.toString().padStart(9, "0").replace(/0+$/, "")}`;
+}
+
+export function formatSolTwoDecimals(sol: number): string {
+  return formatSolFixed(sol, 2);
+}
+
+export function formatSolThreeDecimals(sol: number): string {
+  return formatSolFixed(sol, 3);
+}
+
+function formatSolFixed(sol: number, fractionDigits: number): string {
+  if (!Number.isFinite(sol) || sol < 0) return (0).toFixed(fractionDigits);
+  return sol.toFixed(fractionDigits);
 }
 
 export function formatUsd(value: number): string {
