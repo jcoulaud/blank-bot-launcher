@@ -9,16 +9,7 @@ export const MetadataSchema = z.object({
   name: z.string().min(1).max(64),
   symbol: z.string().min(1).max(20),
   imageStrategy: z.enum(["reuse", "remix", "generate"]),
-  imageStyle: z
-    .enum([
-      "classic-meme-poster",
-      "reaction-image",
-      "surreal-internet-collage",
-      "clean-vector-mascot",
-      "fake-screenshot",
-      "retro-comic-panel",
-    ])
-    .optional(),
+  imageStyle: z.enum(["classic-meme-poster", "reaction-image", "clean-vector-mascot"]).optional(),
   imagePrompt: z.string().optional(),
   remixInstructions: z.string().optional(),
 });

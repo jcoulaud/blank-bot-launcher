@@ -9,22 +9,16 @@ import type { ImageStyle, Metadata } from "./metadata.js";
 const MAX_DOWNLOAD_BYTES = 5 * 1024 * 1024;
 const DOWNLOAD_TIMEOUT_MS = 30_000;
 const SAFE_FALLBACK_IMAGE_STYLE =
-  "safe abstract crypto meme mascot, bright vector poster, simple geometric shapes, playful internet culture aesthetic, no text overlay, no logos, no public figures, no real people, no copyrighted characters, no violence, no political symbols";
+  "safe abstract crypto mascot icon, single chunky cartoon character centered on one flat saturated background color, thick black outline, BONK/WIF/POPCAT-style token icon, no public figures, no real people, no copyrighted characters, no violence, no political symbols";
 const FRAMING_RULES =
-  "Square 1:1 aspect ratio. Full-bleed edge-to-edge composition that fills the entire canvas with subject and background color, all the way to every edge. ABSOLUTELY NO white border, NO outer frame, NO matte, NO letterboxing, NO padding, NO margins around the artwork. The background must extend to the image boundary. No on-image text overlay, no watermarks, no signatures.";
+  "OUTPUT FORMAT: a memecoin token icon, in the visual family of BONK, WIF, POPCAT, PEPE, DOGE — designed to be recognized at 32x32 pixel favicon size on a token list. Square 1:1. Composition: ONE subject (a single character face/head or single chunky object), centered, occupying 70-90% of the canvas, with a strong recognizable silhouette and thick bold outlines. Background: ONE flat saturated solid color (or a very simple two-tone radial), continuous from pixel (0,0) to (canvas_width, canvas_height) with no edge treatment of any kind. The background color and the subject together fill 100% of the canvas. The image MUST NOT contain ANY of: panels, comic gutters, frame lines, outer borders, mattes, vignettes, letterbox bars, padding, margins, caption strips, banner ribbons, title cards, name plates, speech bubbles, watermarks, signatures, logos, words, letters, numbers, or any kind of writing, lettering, or text whatsoever — anywhere in the image, in any language, including stylized graffiti or background text. If the model is tempted to add a caption, label, panel, or border, it must instead extend the flat background color into that space.";
 const IMAGE_STYLE_PROMPTS: Record<ImageStyle, string> = {
   "classic-meme-poster":
-    "bold high-contrast meme poster, simple readable composition, punchy internet-native visual language",
+    "bold meme-poster mascot icon: single character or object centered on one flat saturated background color, thick black outline, high contrast, BONK/PEPE-style token icon — NO panels, NO captions, NO text, NO border",
   "reaction-image":
-    "expressive reaction image framing, exaggerated facial/body language, instantly readable emotion",
-  "surreal-internet-collage":
-    "chaotic surreal internet collage, layered symbols, absurd crypto-Twitter energy",
+    "single reaction-character close-up filling the frame, exaggerated facial expression, thick cartoon outlines, one flat saturated background color edge-to-edge — Wojak/Pepe/Apu/Chad portrait icon style — NO panels, NO speech bubbles, NO text, NO border",
   "clean-vector-mascot":
-    "clean vector mascot or emblem, simple shapes, strong silhouette, token-icon friendly",
-  "fake-screenshot":
-    "parody screenshot aesthetic, UI/news/chart/terminal-inspired layout, clearly fictional and non-branded",
-  "retro-comic-panel":
-    "retro comic panel, dramatic framing, inked outlines, dynamic punchline composition",
+    "clean vector mascot icon, single chunky shape, strong silhouette, thick outline, one flat saturated background color edge-to-edge, app-icon framing — NO badges, NO ribbons, NO text, NO border",
 };
 const DEFAULT_GENERATED_IMAGE_STYLE: ImageStyle = "classic-meme-poster";
 
@@ -68,7 +62,7 @@ export async function prepareImage(
       const remixed = await callGeminiImage({
         apiKey: options.apiKey,
         model: options.model,
-        prompt: `Edit this image according to: ${meta.remixInstructions ?? ""}. Keep the meme/character intact, refine style only. ${FRAMING_RULES}`,
+        prompt: `Edit this image according to: ${meta.remixInstructions ?? ""}. Keep the meme/character intact, refine style only. Re-render as a memecoin token icon: single subject centered, one flat saturated background color edge-to-edge, thick outlines, no panels, no captions, no text of any kind. ${FRAMING_RULES}`,
         imageInline: { data: original.buffer.toString("base64"), mimeType: original.mimeType },
       });
       log.info({ source: "remix" }, "remixed tweet image");

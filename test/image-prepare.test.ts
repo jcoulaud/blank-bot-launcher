@@ -173,7 +173,8 @@ describe("prepareImage dispatch", () => {
     const text = parts.find((p: { text?: string }) => p.text)?.text ?? "";
     expect(text).toContain("doge in space");
     expect(text).toContain("clean vector mascot");
-    expect(text).toContain("No on-image text overlay");
+    expect(text).toContain("memecoin token icon");
+    expect(text).toContain("any kind of writing");
   });
 
   it("generate strategy uses default prompt when imagePrompt missing", async () => {
@@ -210,7 +211,7 @@ describe("prepareImage dispatch", () => {
       ((fetchMock.mock.calls[1]?.[1] as RequestInit).body as string) ?? "{}",
     );
     const retryText = retryBody.contents?.[0]?.parts?.[0]?.text ?? "";
-    expect(retryText).toContain("safe abstract crypto meme mascot");
+    expect(retryText).toContain("safe abstract crypto mascot icon");
     expect(retryText).toContain("no public figures");
     expect(retryText).toContain("VITALIK");
   });

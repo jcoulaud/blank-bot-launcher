@@ -116,12 +116,38 @@ Worked examples (these reflect the right output shape):
       symbol="TRILLIONS"               # only one word and it IS the ticker
       imageStrategy="generate"         # video thumbnail isn't a meme template; do not reuse
       imageStyle="reaction-image"      # the meme is awe at a number, not the number itself
-     imagePrompt="Single Wojak close-up, mouth wide open, eyes bulging, sweat beads on forehead,
-                  trembling hands clutching the sides of his face, pure hype-fomo disbelief reaction.
-                  Solid bold-color background, character fills the frame. The face IS the meme;
-                  do NOT show coins, dollar signs, charts, numbers, or circuit boards."
+     imagePrompt="Single Wojak head-and-shoulders close-up filling the frame: mouth wide open, eyes
+                  bulging, sweat beads, hands clutching the face. Pure FOMO-disbelief reaction.
+                  Thick black outline, ONE flat saturated background color edge-to-edge.
+                  Token-icon framing, BONK/WIF/POPCAT family. Do NOT show coins, dollar signs,
+                  charts, numbers, or circuit boards. NO text, NO border, NO panel."
    # WRONG approach for this tweet: "river of gold coins flowing through a neon circuit board" -
    # that illustrates what the tweet REACTS to, not the reaction. Generic crypto stock art.
+
+6) Tweet: "stay for the best model" - author: sama - has image: no
+   => name="stay for the best model"
+      symbol="MODEL"
+      imageStrategy="generate"
+      imageStyle="reaction-image"
+     imagePrompt="Single Chad/Gigachad face-on portrait icon, smug confident grin, square jaw,
+                  thick black outlines, ONE flat saturated background color edge-to-edge,
+                  BONK/WIF-style token icon. NO comic panels, NO captions, NO speech bubbles,
+                  NO 'best model' text, NO border or frame. The character IS the meme."
+   # WRONG approach: "split-panel comic with THE PAIN vs THE QUALITY captions" - bakes in
+   # panel borders and on-image text; produces an editorial cartoon, not a token icon.
+
+7) Tweet: "Real superhero shit." - author: toly - has image: no
+   => name="Real superhero shit."
+      symbol="SUPERHERO"
+      imageStrategy="reaction-image"   # one character, big face, flat bg
+      imageStyle="reaction-image"
+     imagePrompt="Single cartoon superhero head-and-shoulders close-up, bold mask, smug grin,
+                  thick black outlines, ONE flat saturated background color edge-to-edge.
+                  Token-icon framing, character fills 80% of canvas. NO cape flowing through
+                  the scene, NO city background, NO money bags, NO 'CAPITAL CAPTAIN' title
+                  banner, NO text of any kind, NO border."
+   # WRONG approach: "muscled superhero in front of treasure city with money bags and a name
+   # banner at the bottom" - that's a comic-book cover illustration; at 32px it's a brown blob.
 
 Notice what these have in common:
 - Names come from the tweet itself, not "{Author}'s {topic}"
@@ -258,35 +284,47 @@ Image strategy - this is a strict decision tree, follow it in order:
     (what to keep, what to crop/clean; not "make it pop").
 
   Step 4 (no image): imageStrategy="generate".
-    imagePrompt MUST encode the SPECIFIC joke of THIS tweet:
+
+    Frame this as a TOKEN ICON, not an illustration.
+    The output is shown at 32-64px on token lists (dexscreener, Jupiter, wallets), next to BONK,
+    WIF, POPCAT, PEPE, DOGE. Match that visual family: ONE subject (a single character face/head
+    or single chunky object), centered, filling 70-90% of the canvas, thick bold outlines, and
+    ONE flat saturated solid background color that runs all the way to every pixel of the canvas
+    edge. No environments, no scenes, no busy compositions, no editorial illustrations.
+
+    imagePrompt MUST encode the SPECIFIC joke of THIS tweet via the chosen subject:
     references, characters, wordplay made visual, the punchline of the meme.
     BAD: "cartoon meme illustration of {name}, bold colors"  # generic
-    GOOD: "Smug academic truth-teller archetype with raised eyebrow, visual pun on 'God's honest truth'
-          becoming 'Gad's honest truth'"  # encodes the actual joke
-    Keep it under ~50 words. Concrete subject + visual gag.
+    GOOD: "Smug academic truth-teller archetype, raised eyebrow, head-and-shoulders close-up,
+          thick outlines, flat green background edge-to-edge"  # encodes joke + icon framing
+
+    Keep it under ~60 words. Concrete subject + visual gag + icon framing.
 
     Anti-literal rule (CRITICAL):
     Do NOT illustrate the topic the tweet is reacting TO. Illustrate the REACTION itself.
     A one-word or short reaction tweet ("Trillions", "Few.", "Bullish", "Cooked", "It's so over")
     is meme energy directed at something else; the meme is the cultural shorthand, not the subject.
-    BAD for "Trillions" (one-word hype tweet about big numbers):
-      "river of gold coins flowing through a circuit board" # literal, generic, has zero face/character
-    GOOD for "Trillions":
-      "Wide-eyed Wojak, mouth agape, sweaty, staring at an off-screen monitor with pure FOMO awe.
-       Single character close-up. The face IS the meme; do NOT show coins, money, or numbers."
-    Default to a SINGLE recognizable meme character / archetype (Wojak, Pepe, Apu, Doge, Chad, Brainlet,
-    Gigachad, "this is fine" dog, etc.) doing the emotion the tweet expresses. One subject, big face,
-    legible silhouette, square framing. Avoid sweeping landscapes, abstract environments, "river of X"
-    compositions, and circuit-board / cyberspace backgrounds - they read as stock crypto art, not memes.
-    No on-image text overlay. No watermarks. No borders or frame around the artwork.
+    BAD for "Trillions": "river of gold coins flowing through a circuit board"
+    GOOD for "Trillions": "Wide-eyed Wojak head-and-shoulders close-up, mouth agape, sweaty,
+      pure FOMO awe. ONE flat saturated background color edge-to-edge. Thick black outline."
+    Default to a SINGLE recognizable meme character/archetype (Wojak, Pepe, Apu, Doge, Chad,
+    Brainlet, Gigachad, "this is fine" dog, etc.) doing the emotion the tweet expresses.
+    Avoid: landscapes, environments, scenes with multiple objects, "river of X" compositions,
+    cityscapes, treasure piles, circuit-board / cyberspace backgrounds, money bags, charts —
+    they read as stock crypto illustration, not as token icons.
+
+    HARD RULES for every imagePrompt (state these in the prompt itself, not just here):
+    - NO text, words, letters, numbers, captions, banners, title strips, or speech bubbles
+      anywhere in the image. Not stylized, not in a corner, not even one letter.
+    - NO border, frame, panel, gutter, matte, vignette, or letterbox bar.
+    - NO comic-book panel layouts, NO split panels, NO before/after compositions.
+    - NO faux-UI / faux-screenshot / faux-news compositions.
+    - The flat background color must reach every pixel of every edge.
 
     imageStyle MUST choose exactly one rendering style:
-    - "classic-meme-poster": bold high-contrast poster for wordplay, catchphrases, and iconic one-liners.
-    - "reaction-image": expressive character/reaction-shot framing when the meme is an emotion or social stance.
-    - "surreal-internet-collage": chaotic layered internet composition for absurd, abstract, or multi-reference jokes.
-    - "clean-vector-mascot": simple mascot/object/icon when the tickerable subject is a creature, object, or emblem.
-    - "fake-screenshot": parody UI/news/chart/terminal composition when the joke is about apps, markets, systems, or announcements.
-    - "retro-comic-panel": comic-book frame when the tweet reads like a dramatic scene or punchline.
+    - "classic-meme-poster": bold mascot-icon style for wordplay, catchphrases, iconic one-liners — single subject on flat saturated background.
+    - "reaction-image": single character close-up portrait icon for emotional/reaction tweets ("Trillions", "Few.", "Cooked", a smug Chad, a panicked Wojak).
+    - "clean-vector-mascot": chunky vector mascot/object/emblem icon when the tickerable subject is a creature, object, or symbol.
 
 HARD constraints (the code validates these; failing them retries with the failure reason):
 - name: <=32 bytes after NFKC normalization. No zero-width or RTL characters. For ASCII, count every character including spaces and punctuation.
