@@ -111,6 +111,18 @@ Worked examples (these reflect the right output shape):
       imageStrategy="reuse"           # apu IS the meme; never remix a clean meme template
      (no imagePrompt, no remixInstructions)
 
+5) Tweet: "Trillions" - author: toly - has image: yes (video thumbnail of a guest speaker)
+   => name="Trillions"                # one-word verbatim, the whole point IS the one-word hype
+      symbol="TRILLIONS"               # only one word and it IS the ticker
+      imageStrategy="generate"         # video thumbnail isn't a meme template; do not reuse
+      imageStyle="reaction-image"      # the meme is awe at a number, not the number itself
+     imagePrompt="Single Wojak close-up, mouth wide open, eyes bulging, sweat beads on forehead,
+                  trembling hands clutching the sides of his face, pure hype-fomo disbelief reaction.
+                  Solid bold-color background, character fills the frame. The face IS the meme;
+                  do NOT show coins, dollar signs, charts, numbers, or circuit boards."
+   # WRONG approach for this tweet: "river of gold coins flowing through a neon circuit board" -
+   # that illustrates what the tweet REACTS to, not the reaction. Generic crypto stock art.
+
 Notice what these have in common:
 - Names come from the tweet itself, not "{Author}'s {topic}"
 - Punctuation and casing are preserved when they carry meaning
@@ -251,7 +263,22 @@ Image strategy - this is a strict decision tree, follow it in order:
     BAD: "cartoon meme illustration of {name}, bold colors"  # generic
     GOOD: "Smug academic truth-teller archetype with raised eyebrow, visual pun on 'God's honest truth'
           becoming 'Gad's honest truth'"  # encodes the actual joke
-    Keep it under ~50 words. No on-image text overlay. No watermarks. Concrete subject + visual gag.
+    Keep it under ~50 words. Concrete subject + visual gag.
+
+    Anti-literal rule (CRITICAL):
+    Do NOT illustrate the topic the tweet is reacting TO. Illustrate the REACTION itself.
+    A one-word or short reaction tweet ("Trillions", "Few.", "Bullish", "Cooked", "It's so over")
+    is meme energy directed at something else; the meme is the cultural shorthand, not the subject.
+    BAD for "Trillions" (one-word hype tweet about big numbers):
+      "river of gold coins flowing through a circuit board" # literal, generic, has zero face/character
+    GOOD for "Trillions":
+      "Wide-eyed Wojak, mouth agape, sweaty, staring at an off-screen monitor with pure FOMO awe.
+       Single character close-up. The face IS the meme; do NOT show coins, money, or numbers."
+    Default to a SINGLE recognizable meme character / archetype (Wojak, Pepe, Apu, Doge, Chad, Brainlet,
+    Gigachad, "this is fine" dog, etc.) doing the emotion the tweet expresses. One subject, big face,
+    legible silhouette, square framing. Avoid sweeping landscapes, abstract environments, "river of X"
+    compositions, and circuit-board / cyberspace backgrounds - they read as stock crypto art, not memes.
+    No on-image text overlay. No watermarks. No borders or frame around the artwork.
 
     imageStyle MUST choose exactly one rendering style:
     - "classic-meme-poster": bold high-contrast poster for wordplay, catchphrases, and iconic one-liners.

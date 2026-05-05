@@ -10,6 +10,8 @@ const MAX_DOWNLOAD_BYTES = 5 * 1024 * 1024;
 const DOWNLOAD_TIMEOUT_MS = 30_000;
 const SAFE_FALLBACK_IMAGE_STYLE =
   "safe abstract crypto meme mascot, bright vector poster, simple geometric shapes, playful internet culture aesthetic, no text overlay, no logos, no public figures, no real people, no copyrighted characters, no violence, no political symbols";
+const FRAMING_RULES =
+  "Square 1:1 aspect ratio. Full-bleed edge-to-edge composition that fills the entire canvas with subject and background color, all the way to every edge. ABSOLUTELY NO white border, NO outer frame, NO matte, NO letterboxing, NO padding, NO margins around the artwork. The background must extend to the image boundary. No on-image text overlay, no watermarks, no signatures.";
 const IMAGE_STYLE_PROMPTS: Record<ImageStyle, string> = {
   "classic-meme-poster":
     "bold high-contrast meme poster, simple readable composition, punchy internet-native visual language",
@@ -66,7 +68,7 @@ export async function prepareImage(
       const remixed = await callGeminiImage({
         apiKey: options.apiKey,
         model: options.model,
-        prompt: `Edit this image according to: ${meta.remixInstructions ?? ""}. Keep the meme/character intact, refine style only.`,
+        prompt: `Edit this image according to: ${meta.remixInstructions ?? ""}. Keep the meme/character intact, refine style only. ${FRAMING_RULES}`,
         imageInline: { data: original.buffer.toString("base64"), mimeType: original.mimeType },
       });
       log.info({ source: "remix" }, "remixed tweet image");
@@ -88,7 +90,7 @@ async function generateFromPrompt(
   const prompt =
     meta.imagePrompt ?? `cartoon meme illustration of "${meta.name}", bold colors, simple shapes`;
   const style = meta.imageStyle ?? DEFAULT_GENERATED_IMAGE_STYLE;
-  const generationPrompt = `${prompt}. Visual style: ${IMAGE_STYLE_PROMPTS[style]}. No on-image text overlay, no watermarks.`;
+  const generationPrompt = `${prompt}. Visual style: ${IMAGE_STYLE_PROMPTS[style]}. ${FRAMING_RULES}`;
   let result: { buffer: Buffer; mimeType: string };
   try {
     result = await callGeminiImage({
@@ -111,7 +113,7 @@ async function generateFromPrompt(
 }
 
 function buildSafeFallbackPrompt(meta: Metadata): string {
-  return `Create a ${SAFE_FALLBACK_IMAGE_STYLE} for a token named "${meta.name}" with ticker ${meta.symbol}.`;
+  return `Create a ${SAFE_FALLBACK_IMAGE_STYLE} for a token named "${meta.name}" with ticker ${meta.symbol}. ${FRAMING_RULES}`;
 }
 
 type GeminiImageRequest = {
