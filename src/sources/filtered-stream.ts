@@ -4,7 +4,13 @@ import { getLogger } from "../logger.js";
 import { errMsg } from "../util/errors.js";
 import { type XApiUsageRecorder, xApiReadResourcesFromPayload } from "../util/x-api-cost.js";
 import { ALLOWED_IMAGE_HOSTS } from "../util/x-hosts.js";
-import type { Tweet, TweetHandler, TweetMedia, TweetSource } from "./tweet-source.js";
+import type {
+  Tweet,
+  TweetAttachedMedia,
+  TweetHandler,
+  TweetMedia,
+  TweetSource,
+} from "./tweet-source.js";
 
 const X_RULE_MAX_BYTES = 1024;
 const RULE_TAG = "blank-bot-followed";
@@ -249,20 +255,23 @@ export function parseStreamPayload(payload: StreamPayloadLike): Tweet | null {
   const isRetweet = refs.some((r) => r.type === "retweeted");
   const isQuoteTweet = refs.some((r) => r.type === "quoted");
 
-  const images = extractImages(data.attachments?.media_keys ?? [], includes);
+  const media = extractAttachedMedia(data.attachments?.media_keys ?? [], includes);
+  const images = extractImages(media);
   let quotedTweet: Tweet | undefined;
   const quotedRef = refs.find((r) => r.type === "quoted");
   if (quotedRef && includes?.tweets) {
     const q = includes.tweets.find((t) => t.id === quotedRef.id);
     const qAuthor = q ? includes.users?.find((u) => u.id === q.author_id) : undefined;
     if (q && qAuthor && q.created_at) {
+      const quotedMedia = extractAttachedMedia(q.attachments?.media_keys ?? [], includes);
       quotedTweet = {
         id: q.id,
         authorHandle: qAuthor.username,
         authorId: q.author_id ?? "",
         text: q.text,
         createdAt: new Date(q.created_at),
-        images: extractImages(q.attachments?.media_keys ?? [], includes),
+        media: quotedMedia,
+        images: extractImages(quotedMedia),
         isReply: false,
         isRetweet: false,
         isQuoteTweet: false,
@@ -276,6 +285,7 @@ export function parseStreamPayload(payload: StreamPayloadLike): Tweet | null {
     authorId: data.author_id,
     text: data.text,
     createdAt: new Date(data.created_at),
+    media,
     images,
     isReply,
     isRetweet,
@@ -285,17 +295,29 @@ export function parseStreamPayload(payload: StreamPayloadLike): Tweet | null {
   return tweet;
 }
 
-function extractImages(
+function extractAttachedMedia(
   mediaKeys: readonly string[],
   includes: StreamPayloadLike["includes"] | undefined,
-): TweetMedia[] {
-  const images: TweetMedia[] = [];
+): TweetAttachedMedia[] {
+  const media: TweetAttachedMedia[] = [];
   for (const key of mediaKeys) {
     const m = includes?.media?.find((mm) => mm.media_key === key);
     if (!m) continue;
-    if (m.type === "photo" && m.url && isAllowedImageUrl(m.url)) {
-      images.push({ url: m.url });
+    if (m.type !== "photo" && m.type !== "video" && m.type !== "animated_gif") continue;
+    const item: TweetAttachedMedia = { type: m.type };
+    if (m.url && isAllowedImageUrl(m.url)) item.url = m.url;
+    if (m.preview_image_url && isAllowedImageUrl(m.preview_image_url)) {
+      item.previewImageUrl = m.preview_image_url;
     }
+    media.push(item);
+  }
+  return media;
+}
+
+function extractImages(media: readonly TweetAttachedMedia[]): TweetMedia[] {
+  const images: TweetMedia[] = [];
+  for (const item of media) {
+    if (item.type === "photo" && item.url) images.push({ url: item.url });
   }
   return images;
 }

@@ -12,6 +12,7 @@ const sampleTweet: Tweet = {
   authorId: "1",
   text: "doge to the moon",
   createdAt: new Date(),
+  media: [],
   images: [],
   isReply: false,
   isRetweet: false,
@@ -49,7 +50,11 @@ describe("buildClassifierPrompt", () => {
   });
 
   it("notes when an image is present", () => {
-    const withImg = { ...sampleTweet, images: [{ url: "https://x" }] };
+    const withImg = {
+      ...sampleTweet,
+      media: [{ type: "photo" as const, url: "https://x" }],
+      images: [{ url: "https://x" }],
+    };
     expect(buildClassifierPrompt(withImg)).toContain("Has image: yes");
   });
 
@@ -60,6 +65,7 @@ describe("buildClassifierPrompt", () => {
       quotedTweet: {
         ...sampleTweet,
         id: "q1",
+        media: [{ type: "photo", url: "https://pbs.twimg.com/media/quoted.jpg" }],
         images: [{ url: "https://pbs.twimg.com/media/quoted.jpg" }],
       },
     };
@@ -155,6 +161,7 @@ describe("buildMetadataPrompt", () => {
           id: "q1",
           authorHandle: "coinnews",
           text: "quoted post with portrait",
+          media: [{ type: "photo", url: "https://pbs.twimg.com/media/quoted.jpg" }],
           images: [{ url: "https://pbs.twimg.com/media/quoted.jpg" }],
         },
       },

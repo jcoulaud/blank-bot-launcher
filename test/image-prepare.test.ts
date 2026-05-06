@@ -10,6 +10,7 @@ const tweetWithImage: Tweet = {
   authorId: "1",
   text: "doge",
   createdAt: new Date(),
+  media: [{ type: "photo", url: "https://pbs.twimg.com/media/img.jpg" }],
   images: [{ url: "https://pbs.twimg.com/media/img.jpg" }],
   isReply: false,
   isRetweet: false,
@@ -24,6 +25,7 @@ const quoteTweetWithImage: Tweet = {
     ...tweetWithImage,
     id: "q1",
     authorHandle: "coinnews",
+    media: [{ type: "photo", url: "https://pbs.twimg.com/media/quoted.jpg" }],
     images: [{ url: "https://pbs.twimg.com/media/quoted.jpg" }],
   },
 };

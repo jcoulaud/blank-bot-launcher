@@ -73,6 +73,7 @@ function fakeTweet(): Tweet {
     authorId: "1",
     text: "doge to the moon",
     createdAt: new Date(),
+    media: [],
     images: [],
     isReply: false,
     isRetweet: false,
@@ -224,6 +225,35 @@ describe("runPipeline integration", () => {
     rmSync(tmp, { recursive: true, force: true });
     globalThis.fetch = originalFetch;
     vi.resetModules();
+  });
+
+  it("skips tweets with attached video before classification", async () => {
+    generateObjectMock.mockReset();
+    blankCreateMock.mockReset();
+    const { runPipeline } = await import("../src/pipeline.js");
+    const result = await runPipeline(
+      { ...fakeTweet(), media: [{ type: "video" }] },
+      {
+        env,
+        store,
+        connection: fakeConnection(1),
+        wallet,
+        // biome-ignore lint/suspicious/noExplicitAny: model is mocked
+        llmModel: {} as any,
+        // biome-ignore lint/suspicious/noExplicitAny: client built via mocked SDK
+        blankClient: { launch: { create: blankCreateMock } } as any,
+        dryRun: false,
+        force: false,
+      },
+    );
+
+    expect(result.decision).toBe("skipped_validation");
+    expect(result.reason).toBe("video_media_attached");
+    expect(generateObjectMock).not.toHaveBeenCalled();
+    expect(blankCreateMock).not.toHaveBeenCalled();
+    const seen = store.recentSeen(10);
+    expect(seen[0]?.decision).toBe("skipped_validation");
+    expect(seen[0]?.reason).toBe("video_media_attached");
   });
 
   it("happy path: classify to metadata to image to IPFS to launch to commit, counter +1", async () => {

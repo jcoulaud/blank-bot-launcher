@@ -43,6 +43,7 @@ describe("sortTweetsForBacktest", () => {
       authorId: "u1",
       text: "b",
       createdAt: new Date("2026-05-01T12:00:00Z"),
+      media: [],
       images: [],
       isReply: false,
       isRetweet: false,

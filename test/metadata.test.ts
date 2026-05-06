@@ -13,6 +13,7 @@ const baseTweet = (withImage = false): Tweet => ({
   authorId: "1",
   text: "hi",
   createdAt: new Date(),
+  media: withImage ? [{ type: "photo", url: "https://x.com/img.jpg" }] : [],
   images: withImage ? [{ url: "https://x.com/img.jpg" }] : [],
   isReply: false,
   isRetweet: false,
@@ -26,6 +27,7 @@ const quoteTweetWithImage = (): Tweet => ({
     ...baseTweet(true),
     id: "q1",
     authorHandle: "coinnews",
+    media: [{ type: "photo", url: "https://pbs.twimg.com/media/quoted.jpg" }],
     images: [{ url: "https://pbs.twimg.com/media/quoted.jpg" }],
   },
 });

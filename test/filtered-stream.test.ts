@@ -9,18 +9,20 @@ import {
 import type { Tweet } from "../src/sources/tweet-source.js";
 
 function makeTweet(overrides: Partial<Tweet> = {}): Tweet {
-  return {
+  const tweet: Tweet = {
     id: "1",
     authorHandle: "elonmusk",
     authorId: "u1",
     text: "hello",
     createdAt: new Date("2026-05-01T12:00:00Z"),
+    media: [],
     images: [],
     isReply: false,
     isRetweet: false,
     isQuoteTweet: false,
     ...overrides,
   };
+  return tweet;
 }
 
 describe("buildRule", () => {
@@ -74,6 +76,7 @@ describe("parseStreamPayload", () => {
     const tweet = parseStreamPayload(payload as any);
     expect(tweet).not.toBeNull();
     expect(tweet?.authorHandle).toBe("elonmusk");
+    expect(tweet?.media).toEqual([{ type: "photo", url: "https://pbs.twimg.com/media/img.jpg" }]);
     expect(tweet?.images).toHaveLength(1);
     expect(tweet?.images[0]?.url).toBe("https://pbs.twimg.com/media/img.jpg");
     expect(tweet?.isRetweet).toBe(false);
@@ -134,6 +137,7 @@ describe("parseStreamPayload", () => {
     expect(tweet?.quotedTweet?.authorHandle).toBe("sama");
     expect(tweet?.quotedTweet?.text).toBe("ai is going to be huge");
     expect(tweet?.quotedTweet?.createdAt.toISOString()).toBe("2026-04-30T08:00:00.000Z");
+    expect(tweet?.quotedTweet?.media).toEqual([]);
     expect(tweet?.quotedTweet?.isQuoteTweet).toBe(false);
     expect(tweet?.quotedTweet?.images).toEqual([]);
   });
@@ -178,6 +182,13 @@ describe("parseStreamPayload", () => {
     // biome-ignore lint/suspicious/noExplicitAny: x-api types
     const tweet = parseStreamPayload(payload as any);
     expect(tweet?.images).toEqual([]);
+    expect(tweet?.quotedTweet?.media).toEqual([
+      { type: "photo", url: "https://pbs.twimg.com/media/quoted.jpg" },
+      {
+        type: "video",
+        previewImageUrl: "https://pbs.twimg.com/media/preview.jpg",
+      },
+    ]);
     expect(tweet?.quotedTweet?.images).toEqual([{ url: "https://pbs.twimg.com/media/quoted.jpg" }]);
   });
 
@@ -198,7 +209,7 @@ describe("parseStreamPayload", () => {
     expect(tweet?.quotedTweet).toBeUndefined();
   });
 
-  it("ignores video media (only photos are launchable)", () => {
+  it("keeps video media while excluding it from launchable images", () => {
     const payload = {
       data: {
         id: "1",
@@ -214,6 +225,7 @@ describe("parseStreamPayload", () => {
     };
     // biome-ignore lint/suspicious/noExplicitAny: x-api types
     const tweet = parseStreamPayload(payload as any);
+    expect(tweet?.media).toEqual([{ type: "video" }]);
     expect(tweet?.images).toHaveLength(0);
   });
 });

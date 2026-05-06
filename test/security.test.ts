@@ -165,6 +165,7 @@ describe("prompt fence: random nonce per prompt", () => {
       authorId: "1",
       text: "hi",
       createdAt: new Date(),
+      media: [],
       images: [],
       isReply: false,
       isRetweet: false,
