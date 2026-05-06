@@ -31,6 +31,8 @@ export interface TweetSource {
   stop(): Promise<void>;
 }
 
+export type TweetMediaType = "no_image" | "tweet_image" | "quoted_image" | "video";
+
 export function getPrimaryLaunchImage(tweet: Tweet): TweetMedia | undefined {
   return tweet.images[0] ?? tweet.quotedTweet?.images[0];
 }
@@ -46,6 +48,13 @@ export function hasAttachedVideo(tweet: Tweet): boolean {
     tweet.media.some((media) => media.type === "video") ||
     Boolean(tweet.quotedTweet && hasAttachedVideo(tweet.quotedTweet))
   );
+}
+
+export function tweetMediaType(tweet: Tweet): TweetMediaType {
+  if (hasAttachedVideo(tweet)) return "video";
+  if (tweet.images.length > 0) return "tweet_image";
+  if ((tweet.quotedTweet?.images.length ?? 0) > 0) return "quoted_image";
+  return "no_image";
 }
 
 const URL_RE = /\bhttps?:\/\/\S+/gi;

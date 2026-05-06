@@ -7,7 +7,17 @@ import {
   pillClass,
   renderHome,
 } from "../src/dashboard/render.js";
-import type { Decision } from "../src/store/db.js";
+import type { DashboardTelemetry, Decision } from "../src/store/db.js";
+
+const emptyTelemetry: DashboardTelemetry = {
+  stageMetrics: [],
+  decisionCounts: [],
+  scoreBuckets: [],
+  accountStats: [],
+  mediaStats: [],
+  recentErrors: [],
+  pending: { queued: 0, locked: 0 },
+};
 
 describe("formatReason", () => {
   it("returns empty string for null", () => {
@@ -116,6 +126,7 @@ describe("renderHome", () => {
       launchesPage: 1,
       launchesPageSize: 20,
       launchesTotal: 0,
+      telemetry: emptyTelemetry,
       balanceSol: 1.23,
       walletPubkey: "Wallet111111111111111111111111111111111",
     });

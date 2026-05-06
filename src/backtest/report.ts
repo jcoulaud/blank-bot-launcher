@@ -2,7 +2,8 @@ import { chmodSync, mkdirSync, writeFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import type { Accounts } from "../config.js";
 import type { PipelineResult } from "../pipeline.js";
-import type { Tweet } from "../sources/tweet-source.js";
+import { type Tweet, tweetMediaType } from "../sources/tweet-source.js";
+import type { CalibrationReport } from "./calibration.js";
 
 export type BacktestReportEntry = {
   tweet: {
@@ -13,6 +14,8 @@ export type BacktestReportEntry = {
     text: string;
     createdAt: string;
     imageCount: number;
+    quotedImageCount: number;
+    mediaType: ReturnType<typeof tweetMediaType>;
     isQuoteTweet: boolean;
   };
   result: PipelineResult;
@@ -24,6 +27,7 @@ export type BacktestReport = {
   perAccountLimit: number;
   tweetsProcessed: number;
   summary: Record<string, number>;
+  calibration?: CalibrationReport;
   entries: BacktestReportEntry[];
 };
 
@@ -31,9 +35,10 @@ export function buildBacktestReport(args: {
   accounts: Accounts;
   perAccountLimit: number;
   entries: BacktestReportEntry[];
+  calibration?: CalibrationReport;
   now?: Date;
 }): BacktestReport {
-  return {
+  const report: BacktestReport = {
     generatedAt: (args.now ?? new Date()).toISOString(),
     accounts: args.accounts.accounts.map((a) => a.handle),
     perAccountLimit: args.perAccountLimit,
@@ -41,6 +46,8 @@ export function buildBacktestReport(args: {
     summary: summarizeBacktest(args.entries),
     entries: args.entries,
   };
+  if (args.calibration) report.calibration = args.calibration;
+  return report;
 }
 
 export function buildBacktestEntry(tweet: Tweet, result: PipelineResult): BacktestReportEntry {
@@ -53,6 +60,8 @@ export function buildBacktestEntry(tweet: Tweet, result: PipelineResult): Backte
       text: tweet.text,
       createdAt: tweet.createdAt.toISOString(),
       imageCount: tweet.images.length,
+      quotedImageCount: tweet.quotedTweet?.images.length ?? 0,
+      mediaType: tweetMediaType(tweet),
       isQuoteTweet: tweet.isQuoteTweet,
     },
     result,

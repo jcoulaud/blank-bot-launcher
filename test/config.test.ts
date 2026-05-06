@@ -20,6 +20,9 @@ describe("parseEnv", () => {
     expect(env.MAX_SOL_PER_DAY).toBe(0.15);
     expect(env.CLASSIFIER_THRESHOLD).toBe(0.85);
     expect(env.LLM_MODEL).toBe("gemini-2.5-flash");
+    expect(env.PENDING_LOCK_STALE_S).toBe(300);
+    expect(env.CIRCUIT_BREAKER_PAUSE_S).toBe(60);
+    expect(env.MAX_X_API_USD_PER_DAY).toBe(25);
   });
 
   it("throws ConfigError when a required field is missing", () => {

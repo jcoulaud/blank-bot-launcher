@@ -3,6 +3,7 @@ import { dirname, resolve } from "node:path";
 import Database, { type Database as DB } from "better-sqlite3";
 import { z } from "zod";
 import { FLOAT_EPS_SOL } from "../config.js";
+import { type Tweet, type TweetMediaType, tweetMediaType } from "../sources/tweet-source.js";
 import {
   uniqueUsageResources,
   X_API_USAGE_RESOURCE_TYPES,
@@ -18,7 +19,8 @@ CREATE TABLE IF NOT EXISTS tweets_seen (
   classifier_score REAL,
   decision TEXT NOT NULL,
   reason TEXT,
-  seen_count INTEGER NOT NULL DEFAULT 1
+  seen_count INTEGER NOT NULL DEFAULT 1,
+  media_type TEXT NOT NULL DEFAULT 'unknown'
 );
 CREATE INDEX IF NOT EXISTS idx_tweets_seen_at ON tweets_seen(seen_at DESC);
 
@@ -55,6 +57,29 @@ CREATE TABLE IF NOT EXISTS x_api_usage_resources (
   PRIMARY KEY (date, resource_type, resource_id)
 );
 CREATE INDEX IF NOT EXISTS idx_x_api_usage_date ON x_api_usage_resources(date);
+
+CREATE TABLE IF NOT EXISTS pending_tweets (
+  tweet_id TEXT PRIMARY KEY,
+  payload_json TEXT NOT NULL,
+  enqueued_at INTEGER NOT NULL,
+  locked_at INTEGER,
+  attempts INTEGER NOT NULL DEFAULT 0
+);
+CREATE INDEX IF NOT EXISTS idx_pending_tweets_ready ON pending_tweets(locked_at, enqueued_at);
+
+CREATE TABLE IF NOT EXISTS pipeline_events (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  tweet_id TEXT,
+  author_handle TEXT,
+  stage TEXT NOT NULL,
+  status TEXT NOT NULL,
+  started_at INTEGER NOT NULL,
+  finished_at INTEGER NOT NULL,
+  duration_ms INTEGER NOT NULL,
+  detail TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_pipeline_events_at ON pipeline_events(finished_at DESC);
+CREATE INDEX IF NOT EXISTS idx_pipeline_events_stage ON pipeline_events(stage, status, finished_at DESC);
 `;
 
 // Schemas validate every row read from SQLite. This catches schema drift,
@@ -79,6 +104,7 @@ const SeenTweetSchema = z.object({
   // on first insert, +1 on each upsert) and surfaces in dashboards. Callers
   // building a SeenTweet to write should leave it unset.
   seen_count: z.number().int().min(1).default(1),
+  media_type: z.string().default("unknown"),
 });
 
 const LaunchRecordSchema = z.object({
@@ -109,6 +135,61 @@ const XApiUsageSummaryRowSchema = z.object({
   cost_usd: z.number(),
 });
 
+const PendingTweetRowSchema = z.object({
+  tweet_id: z.string(),
+  payload_json: z.string(),
+  enqueued_at: z.number(),
+  locked_at: z.number().nullable(),
+  attempts: z.number().int().min(0),
+});
+
+const PipelineEventSchema = z.object({
+  id: z.number().int(),
+  tweet_id: z.string().nullable(),
+  author_handle: z.string().nullable(),
+  stage: z.string(),
+  status: z.enum(["ok", "skipped", "blocked", "error"]),
+  started_at: z.number(),
+  finished_at: z.number(),
+  duration_ms: z.number(),
+  detail: z.string().nullable(),
+});
+
+const StageMetricRowSchema = z.object({
+  stage: z.string(),
+  runs: z.number(),
+  errors: z.number(),
+  avg_duration_ms: z.number(),
+  max_duration_ms: z.number(),
+});
+
+const DecisionCountRowSchema = z.object({
+  decision: z.string(),
+  count: z.number(),
+});
+
+const ScoreBucketRowSchema = z.object({
+  bucket: z.string(),
+  count: z.number(),
+});
+
+const AccountDecisionRowSchema = z.object({
+  author_handle: z.string(),
+  total: z.number(),
+  launched: z.number(),
+  dry_run: z.number(),
+  skipped: z.number(),
+  avg_score: z.number().nullable(),
+});
+
+const MediaDecisionRowSchema = z.object({
+  media_type: z.string(),
+  total: z.number(),
+  launched: z.number(),
+  dry_run: z.number(),
+  skipped: z.number(),
+});
+
 export type Decision = z.infer<typeof DecisionSchema>;
 // On read (z.output) seen_count is always present; on write (z.input) it's
 // optional because `.default(1)` fills it in.
@@ -116,6 +197,21 @@ export type SeenTweet = z.output<typeof SeenTweetSchema>;
 export type SeenTweetInput = z.input<typeof SeenTweetSchema>;
 export type LaunchRecord = z.infer<typeof LaunchRecordSchema>;
 export type DailyCounter = z.infer<typeof DailyCounterSchema>;
+export type PendingTweet = z.infer<typeof PendingTweetRowSchema> & { tweet: Tweet };
+export type PipelineEvent = z.infer<typeof PipelineEventSchema>;
+export type PipelineEventStatus = PipelineEvent["status"];
+export type DashboardTelemetry = {
+  stageMetrics: Array<z.infer<typeof StageMetricRowSchema>>;
+  decisionCounts: Array<z.infer<typeof DecisionCountRowSchema>>;
+  scoreBuckets: Array<z.infer<typeof ScoreBucketRowSchema>>;
+  accountStats: Array<z.infer<typeof AccountDecisionRowSchema>>;
+  mediaStats: Array<z.infer<typeof MediaDecisionRowSchema>>;
+  recentErrors: PipelineEvent[];
+  pending: {
+    queued: number;
+    locked: number;
+  };
+};
 export type LaunchTotals = {
   launches_count: number;
   sol_spent: number;
@@ -186,6 +282,11 @@ export class Store {
     } catch {
       /* column already exists */
     }
+    try {
+      this.db.exec("ALTER TABLE tweets_seen ADD COLUMN media_type TEXT NOT NULL DEFAULT 'unknown'");
+    } catch {
+      /* column already exists */
+    }
   }
 
   hasSeen(tweetId: string): boolean {
@@ -199,14 +300,15 @@ export class Store {
     this.db
       .prepare(
         `INSERT INTO tweets_seen
-         (tweet_id, author_handle, seen_at, classifier_score, decision, reason, seen_count)
-         VALUES (?, ?, ?, ?, ?, ?, 1)
+         (tweet_id, author_handle, seen_at, classifier_score, decision, reason, seen_count, media_type)
+         VALUES (?, ?, ?, ?, ?, ?, 1, ?)
          ON CONFLICT(tweet_id) DO UPDATE SET
            author_handle = excluded.author_handle,
            seen_at = excluded.seen_at,
            classifier_score = excluded.classifier_score,
            decision = excluded.decision,
            reason = excluded.reason,
+           media_type = excluded.media_type,
            seen_count = seen_count + 1`,
       )
       .run(
@@ -216,6 +318,95 @@ export class Store {
         record.classifier_score,
         record.decision,
         record.reason,
+        record.media_type ?? "unknown",
+      );
+  }
+
+  enqueuePendingTweet(tweet: Tweet, timestampMs = Date.now()): void {
+    this.db
+      .prepare(
+        `INSERT INTO pending_tweets
+         (tweet_id, payload_json, enqueued_at, locked_at, attempts)
+         VALUES (?, ?, ?, NULL, 0)
+         ON CONFLICT(tweet_id) DO UPDATE SET
+           payload_json = excluded.payload_json`,
+      )
+      .run(tweet.id, JSON.stringify(tweetToJson(tweet)), timestampMs);
+  }
+
+  claimNextPendingTweet(timestampMs: number, staleAfterMs: number): PendingTweet | null {
+    const staleBefore = timestampMs - staleAfterMs;
+    const select = this.db.prepare(
+      `SELECT *
+       FROM pending_tweets
+       WHERE locked_at IS NULL OR locked_at <= ?
+       ORDER BY enqueued_at ASC, rowid ASC
+       LIMIT 1`,
+    );
+    const lock = this.db.prepare(
+      `UPDATE pending_tweets
+       SET locked_at = ?, attempts = attempts + 1
+       WHERE tweet_id = ?`,
+    );
+    return this.db.transaction(() => {
+      const raw = select.get(staleBefore);
+      if (!raw) return null;
+      const before = parseRow(PendingTweetRowSchema, raw);
+      lock.run(timestampMs, before.tweet_id);
+      const updated = { ...before, locked_at: timestampMs, attempts: before.attempts + 1 };
+      return { ...updated, tweet: tweetFromJson(JSON.parse(updated.payload_json)) };
+    })();
+  }
+
+  completePendingTweet(tweetId: string): void {
+    this.db.prepare("DELETE FROM pending_tweets WHERE tweet_id = ?").run(tweetId);
+  }
+
+  pendingSummary(): DashboardTelemetry["pending"] {
+    const row = this.db
+      .prepare(
+        `SELECT
+           COUNT(*) AS queued,
+           SUM(CASE WHEN locked_at IS NOT NULL THEN 1 ELSE 0 END) AS locked
+         FROM pending_tweets`,
+      )
+      .get();
+    return z
+      .object({
+        queued: z.number(),
+        locked: z.number().nullable(),
+      })
+      .transform((value) => ({
+        queued: value.queued,
+        locked: value.locked ?? 0,
+      }))
+      .parse(row);
+  }
+
+  recordPipelineEvent(event: {
+    tweetId?: string;
+    authorHandle?: string;
+    stage: string;
+    status: PipelineEventStatus;
+    startedAt: number;
+    finishedAt: number;
+    detail?: string;
+  }): void {
+    this.db
+      .prepare(
+        `INSERT INTO pipeline_events
+         (tweet_id, author_handle, stage, status, started_at, finished_at, duration_ms, detail)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+      )
+      .run(
+        event.tweetId ?? null,
+        event.authorHandle ?? null,
+        event.stage,
+        event.status,
+        event.startedAt,
+        event.finishedAt,
+        Math.max(0, event.finishedAt - event.startedAt),
+        event.detail ?? null,
       );
   }
 
@@ -292,14 +483,15 @@ export class Store {
     );
     const upsertSeen = this.db.prepare(
       `INSERT INTO tweets_seen
-       (tweet_id, author_handle, seen_at, classifier_score, decision, reason, seen_count)
-       VALUES (?, ?, ?, ?, ?, ?, 1)
+       (tweet_id, author_handle, seen_at, classifier_score, decision, reason, seen_count, media_type)
+       VALUES (?, ?, ?, ?, ?, ?, 1, ?)
        ON CONFLICT(tweet_id) DO UPDATE SET
          author_handle = excluded.author_handle,
          seen_at = excluded.seen_at,
          classifier_score = excluded.classifier_score,
          decision = excluded.decision,
          reason = excluded.reason,
+         media_type = excluded.media_type,
          seen_count = seen_count + 1`,
     );
     const reconcileCounter = this.db.prepare(
@@ -328,6 +520,7 @@ export class Store {
         seen.classifier_score,
         seen.decision,
         seen.reason,
+        seen.media_type ?? "unknown",
       );
       reconcileCounter.run(reservation.plannedSpendSol, launch.sol_spent, reservation.date);
     })();
@@ -434,6 +627,102 @@ export class Store {
     return row ? parseRow(LaunchRecordSchema, row) : null;
   }
 
+  recentPipelineEvents(limit: number, statuses?: readonly PipelineEventStatus[]): PipelineEvent[] {
+    const statusList = statuses?.length ? statuses : undefined;
+    const where = statusList ? `WHERE status IN (${statusList.map(() => "?").join(", ")})` : "";
+    const rows = this.db
+      .prepare(`SELECT * FROM pipeline_events ${where} ORDER BY finished_at DESC LIMIT ?`)
+      .all(...(statusList ?? []), limit);
+    return parseRows(PipelineEventSchema, rows);
+  }
+
+  dashboardTelemetry(): DashboardTelemetry {
+    const stageRows = this.db
+      .prepare(
+        `SELECT
+           stage,
+           COUNT(*) AS runs,
+           SUM(CASE WHEN status = 'error' THEN 1 ELSE 0 END) AS errors,
+           COALESCE(AVG(duration_ms), 0) AS avg_duration_ms,
+           COALESCE(MAX(duration_ms), 0) AS max_duration_ms
+         FROM pipeline_events
+         GROUP BY stage
+         ORDER BY stage`,
+      )
+      .all();
+    const decisionRows = this.db
+      .prepare(
+        `SELECT decision, COUNT(*) AS count
+         FROM tweets_seen
+         GROUP BY decision
+         ORDER BY count DESC, decision`,
+      )
+      .all();
+    const scoreRows = this.db
+      .prepare(
+        `SELECT
+           CASE
+             WHEN classifier_score IS NULL THEN 'none'
+             WHEN classifier_score < 0.5 THEN '<0.50'
+             WHEN classifier_score < 0.7 THEN '0.50-0.69'
+             WHEN classifier_score < 0.85 THEN '0.70-0.84'
+             WHEN classifier_score < 0.95 THEN '0.85-0.94'
+             ELSE '>=0.95'
+           END AS bucket,
+           COUNT(*) AS count
+         FROM tweets_seen
+         GROUP BY bucket
+         ORDER BY
+           CASE bucket
+             WHEN 'none' THEN 0
+             WHEN '<0.50' THEN 1
+             WHEN '0.50-0.69' THEN 2
+             WHEN '0.70-0.84' THEN 3
+             WHEN '0.85-0.94' THEN 4
+             ELSE 5
+           END`,
+      )
+      .all();
+    const accountRows = this.db
+      .prepare(
+        `SELECT
+           author_handle,
+           COUNT(*) AS total,
+           SUM(CASE WHEN decision = 'launched' THEN 1 ELSE 0 END) AS launched,
+           SUM(CASE WHEN decision = 'dry_run' THEN 1 ELSE 0 END) AS dry_run,
+           SUM(CASE WHEN decision NOT IN ('launched', 'dry_run') THEN 1 ELSE 0 END) AS skipped,
+           AVG(classifier_score) AS avg_score
+         FROM tweets_seen
+         GROUP BY author_handle
+         ORDER BY total DESC, author_handle
+         LIMIT 12`,
+      )
+      .all();
+    const mediaRows = this.db
+      .prepare(
+        `SELECT
+           media_type,
+           COUNT(*) AS total,
+           SUM(CASE WHEN decision = 'launched' THEN 1 ELSE 0 END) AS launched,
+           SUM(CASE WHEN decision = 'dry_run' THEN 1 ELSE 0 END) AS dry_run,
+           SUM(CASE WHEN decision NOT IN ('launched', 'dry_run') THEN 1 ELSE 0 END) AS skipped
+         FROM tweets_seen
+         GROUP BY media_type
+         ORDER BY total DESC, media_type`,
+      )
+      .all();
+
+    return {
+      stageMetrics: parseRows(StageMetricRowSchema, stageRows),
+      decisionCounts: parseRows(DecisionCountRowSchema, decisionRows),
+      scoreBuckets: parseRows(ScoreBucketRowSchema, scoreRows),
+      accountStats: parseRows(AccountDecisionRowSchema, accountRows),
+      mediaStats: parseRows(MediaDecisionRowSchema, mediaRows),
+      recentErrors: this.recentPipelineEvents(10, ["error", "blocked"]),
+      pending: this.pendingSummary(),
+    };
+  }
+
   close(): void {
     this.db.close();
   }
@@ -461,4 +750,64 @@ export function isoDateUtc(timestampMs: number): string {
   // YYYY-MM-DD in UTC, used as the daily_counters primary key.
   const d = new Date(timestampMs);
   return d.toISOString().slice(0, 10);
+}
+
+type JsonTweet = Omit<Tweet, "createdAt" | "quotedTweet"> & {
+  createdAt: string;
+  quotedTweet?: JsonTweet;
+};
+
+function tweetToJson(tweet: Tweet): JsonTweet {
+  const out: JsonTweet = {
+    id: tweet.id,
+    authorHandle: tweet.authorHandle,
+    authorId: tweet.authorId,
+    text: tweet.text,
+    createdAt: tweet.createdAt.toISOString(),
+    media: tweet.media,
+    images: tweet.images,
+    isReply: tweet.isReply,
+    isRetweet: tweet.isRetweet,
+    isQuoteTweet: tweet.isQuoteTweet,
+  };
+  if (tweet.quotedTweet) out.quotedTweet = tweetToJson(tweet.quotedTweet);
+  return out;
+}
+
+function tweetFromJson(value: unknown): Tweet {
+  const raw = value as Partial<JsonTweet>;
+  if (
+    !raw ||
+    typeof raw !== "object" ||
+    typeof raw.id !== "string" ||
+    typeof raw.authorHandle !== "string" ||
+    typeof raw.authorId !== "string" ||
+    typeof raw.text !== "string" ||
+    typeof raw.createdAt !== "string" ||
+    !Array.isArray(raw.media) ||
+    !Array.isArray(raw.images) ||
+    typeof raw.isReply !== "boolean" ||
+    typeof raw.isRetweet !== "boolean" ||
+    typeof raw.isQuoteTweet !== "boolean"
+  ) {
+    throw new Error("pending tweet payload failed validation");
+  }
+  const tweet: Tweet = {
+    id: raw.id,
+    authorHandle: raw.authorHandle,
+    authorId: raw.authorId,
+    text: raw.text,
+    createdAt: new Date(raw.createdAt),
+    media: raw.media,
+    images: raw.images,
+    isReply: raw.isReply,
+    isRetweet: raw.isRetweet,
+    isQuoteTweet: raw.isQuoteTweet,
+  };
+  if (raw.quotedTweet) tweet.quotedTweet = tweetFromJson(raw.quotedTweet);
+  return tweet;
+}
+
+export function mediaTypeForSeen(tweet: Tweet): TweetMediaType {
+  return tweetMediaType(tweet);
 }

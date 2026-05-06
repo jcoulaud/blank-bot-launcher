@@ -64,7 +64,19 @@ const env: Env = {
   LOG_LEVEL: "info",
   SKIP_OLDER_THAN_S: 300,
   STAKING_SHARE_BPS: 8000,
+  PENDING_LOCK_STALE_S: 300,
+  CIRCUIT_BREAKER_WINDOW_S: 900,
+  CIRCUIT_BREAKER_PAUSE_S: 60,
+  MAX_CONSECUTIVE_PROVIDER_ERRORS: 3,
+  MAX_CONSECUTIVE_IPFS_ERRORS: 3,
+  MAX_CONSECUTIVE_LAUNCH_ERRORS: 2,
+  MAX_X_API_USD_PER_DAY: 25,
 };
+
+const VALID_1X1_PNG = Buffer.from(
+  "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/p9sAAAAASUVORK5CYII=",
+  "base64",
+);
 
 function fakeTweet(): Tweet {
   return {
@@ -119,7 +131,7 @@ function geminiImageResponse(): Response {
           content: {
             parts: [
               {
-                inlineData: { mimeType: "image/png", data: Buffer.from("png").toString("base64") },
+                inlineData: { mimeType: "image/png", data: VALID_1X1_PNG.toString("base64") },
               },
             ],
           },
@@ -366,7 +378,7 @@ describe("runPipeline integration", () => {
         launchableMeme: false,
         memeSource: "none",
         disqualifiers: ["no_self_contained_joke"],
-        reason: "boring",
+        reason: "weak signal",
       }),
     });
     const { runPipeline } = await import("../src/pipeline.js");
@@ -569,7 +581,7 @@ describe("runPipeline integration", () => {
         launchableMeme: false,
         memeSource: "none",
         disqualifiers: ["no_self_contained_joke"],
-        reason: "boring",
+        reason: "weak signal",
       }),
     });
     globalThis.fetch = vi.fn() as never;

@@ -26,6 +26,9 @@ You should receive an acknowledgement within 5 business days.
 | Dashboard loopback bind only | `src/dashboard/server.ts` | manual |
 | Daily caps and balance check | `src/safety/safety.ts` | `test/safety.test.ts` |
 | Atomic daily-cap reservation | `src/store/db.ts` | `test/db.test.ts`, `test/pipeline.test.ts` |
+| Persistent pending tweet queue | `src/store/db.ts`, `src/index.ts` | `test/db.test.ts` |
+| Circuit breakers for provider/IPFS/launch/X spend failures | `src/safety/circuit-breaker.ts` | `test/circuit-breaker.test.ts` |
+| Image quality validation before IPFS upload | `src/brain/image.ts`, `src/pipeline.ts` | `test/image.test.ts`, `test/pipeline.test.ts` |
 
 ## Known sharp edges
 

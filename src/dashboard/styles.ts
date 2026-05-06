@@ -80,7 +80,7 @@ a:hover,a:focus{text-decoration:underline}
 
 /* stats grid */
 .stats{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin-top:16px}
-.stats-dashboard{grid-template-columns:repeat(4,1fr)}
+.stats-dashboard{grid-template-columns:repeat(5,1fr)}
 .stat{
   background:var(--surface-card);border:1px solid var(--hairline);
   border-radius:6px;padding:20px 24px;
@@ -102,6 +102,7 @@ a:hover,a:focus{text-decoration:underline}
   border-radius:6px;overflow:hidden;
 }
 .table-note{font-size:13px;color:var(--mute);margin:12px 0 0}
+.split-tables{display:grid;grid-template-columns:1fr 1fr;gap:16px}
 .table-scroll{overflow-x:auto}
 table{width:100%;border-collapse:collapse;font-size:14px}
 thead th{
@@ -234,6 +235,7 @@ code,.code-inline{
   .nav-meta{display:none}
   .display{font-size:28px}
   .stats,.stats-dashboard{grid-template-columns:1fr}
+  .split-tables{grid-template-columns:1fr}
   .col-reason{max-width:none}
 }
 `;

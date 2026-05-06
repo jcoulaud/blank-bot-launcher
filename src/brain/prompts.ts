@@ -8,6 +8,7 @@ import { ZERO_WIDTH_AND_BIDI_RE } from "../util/text.js";
 
 // Keep prompt input bounded. Quoted tweet bodies can be longer than normal X posts.
 const MAX_TWEET_TEXT_CHARS = 600;
+export const CLASSIFIER_PROMPT_VERSION = "classifier-2026-05-06";
 
 /**
  * Clean tweet text before inserting it into a prompt.
@@ -249,7 +250,7 @@ REJECT signals (any of these => low confidence, REJECT):
 Important calibration notes:
 - Short tweets (3-5 words) can absolutely score 0.9+ if the phrase is sticky. "Doge to the moon" is 4 words. Don't reject for being short.
 - A typo or "wrong" word can BE the joke. Don't try to "fix" it in your reasoning.
-- Don't over-weight the author. A boring tweet from Elon is still a boring tweet. A banger from anyone is a banger.
+- Don't over-weight the author. A weak tweet from Elon is still weak. A strong meme candidate from any account remains strong.
 - If the tweet has an image that's already a meme, that's a strong launch signal; the visual asset is half the meme.
 - If the tweet quotes another tweet with an image, use the quoted image only as visual context for the source tweet's own joke.
 - If you score borderline (0.6-0.85), default to reject. Missing a weak tweet is better than launching a generic token.

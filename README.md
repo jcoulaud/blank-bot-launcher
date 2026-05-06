@@ -32,10 +32,11 @@ flowchart TD
   J --> K["Commit launch row"]
 ```
 
-Every terminal result is recorded in SQLite as a decision: `launched`,
-`dry_run`, `skipped_low_score`, `skipped_validation`, `skipped_safety`, or
-`skipped_error`. That makes restarts boring. A tweet that was already handled
-does not get handled again unless you run a replay with `--force`.
+Incoming tweets are first persisted into a SQLite queue, then processed by one
+worker. Every terminal result is recorded as a decision: `launched`, `dry_run`,
+`skipped_low_score`, `skipped_validation`, `skipped_safety`, or
+`skipped_error`. Restarts are idempotent: a tweet that was already handled does
+not get handled again unless you run a replay with `--force`.
 
 ## Quickstart
 
@@ -79,6 +80,7 @@ npm run dev -- --dry-run              # local run without launching
 npm run start                         # live run
 npm run backtest                      # dry-run recent tweets from followed accounts
 npm run backtest -- --backtest-limit 25
+npm run backtest -- --backtest-labels ./data/labels.jsonl
 npm run start -- --dashboard-only      # serve dashboard from local DB, no X connection
 npm run check-config                  # validate env, accounts, caps, and wallet balance
 npm run build                         # TypeScript check for src
@@ -109,6 +111,28 @@ npm run backtest -- --backtest-report ./data/backtests/latest.json
 The report includes the tweet, classifier result, token metadata, prepared
 image summary, and final decision for each processed tweet.
 
+### Calibration labels
+
+Backtests can include labeled precision/recall metrics. Create a JSON or JSONL
+file with one label per tweet:
+
+```json
+{"tweetId":"123","label":"good_launch","note":"clean meme"}
+{"tweetId":"456","label":"false_positive","note":"promo, not a meme"}
+{"tweetId":"789","label":"false_negative"}
+```
+
+Supported labels are `good_launch`, `false_positive`, `false_negative`,
+`true_negative`, and `ignore`. Run:
+
+```bash
+npm run backtest -- --backtest-labels ./data/labels.jsonl
+```
+
+The JSON report then includes threshold sweeps, precision, recall, F1,
+per-account slices, and media-type slices for the current classifier prompt
+version.
+
 ## Safety notes
 
 This bot signs transactions with a hot wallet. Treat that wallet as
@@ -120,17 +144,26 @@ disposable.
   tight.
 - Set `WARN_IF_BALANCE_ABOVE_SOL` below any balance you would be upset to
   lose.
+- Keep `MAX_X_API_USD_PER_DAY` below your daily X API budget.
 - Run `--dry-run` first and inspect the SQLite records before going live.
 - The local dashboard binds to `127.0.0.1` only.
 - The dashboard estimates X API read spend from returned Post, User, and Media
   resources. The X Developer Console remains the source of truth for billing.
+- Circuit breakers pause live queue processing after repeated provider, IPFS,
+  launch, or X spend failures. Pending tweets stay queued.
+- Images are validated before IPFS upload for supported MIME type, readable
+  dimensions, size cap, and square-ish token-icon framing.
 
 ## Crash recovery
 
-The pipeline reserves a daily-cap slot before the SDK launch and commits the
-launch row only after the SDK confirms. If the process is killed between those
-two steps, the daily counter can sit ahead of the launches table. The bot will
-then under-launch for the rest of that UTC day.
+The stream intake writes pending tweets to SQLite before the pipeline runs. If
+the process exits, unprocessed tweets remain in `pending_tweets` and locked
+items become claimable again after `PENDING_LOCK_STALE_S`.
+
+The pipeline reserves a daily-cap slot before IPFS upload and the SDK launch,
+then commits the launch row only after the SDK confirms. If the process is
+killed between those two steps, the daily counter can sit ahead of the launches
+table. The bot will then under-launch for the rest of that UTC day.
 
 After a hard crash, run:
 
@@ -151,6 +184,7 @@ src/
   sources/     X stream, historical timeline, and mock sources
   store/       SQLite persistence
   dashboard/   optional loopback status page
+  backtest/    reports and labeled classifier calibration
   pipeline.ts  one tweet through every launch stage
   cli.ts       flag parsing and keypair loading
   index.ts     bootstrap, shutdown, source selection, dashboard wiring

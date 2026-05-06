@@ -30,7 +30,7 @@ describe("passesThreshold", () => {
   });
 
   it("rejects when shouldLaunch=false even with high confidence", () => {
-    const c = classification({ shouldLaunch: false, confidence: 0.99, reason: "boring" });
+    const c = classification({ shouldLaunch: false, confidence: 0.99, reason: "weak signal" });
     expect(passesThreshold(c, 0.85)).toBe(false);
   });
 

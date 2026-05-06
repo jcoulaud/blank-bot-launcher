@@ -58,16 +58,19 @@ describe("parseCliFlags", () => {
     expect(parseCliFlags(["--backtest", "--backtest-limit", "25"]).backtestLimit).toBe(25);
   });
 
-  it("parses --backtest-db and --backtest-report", () => {
+  it("parses --backtest-db, --backtest-report, and --backtest-labels", () => {
     const flags = parseCliFlags([
       "--backtest",
       "--backtest-db",
       "./data/custom.db",
       "--backtest-report",
       "./data/report.json",
+      "--backtest-labels",
+      "./data/labels.jsonl",
     ]);
     expect(flags.backtestDbPath).toBe("./data/custom.db");
     expect(flags.backtestReportPath).toBe("./data/report.json");
+    expect(flags.backtestLabelsPath).toBe("./data/labels.jsonl");
   });
 
   it("parses --check-config", () => {
@@ -110,6 +113,7 @@ describe("parseCliFlags", () => {
     expect(() => parseCliFlags(["--backtest-limit", "50"])).toThrow(CliFlagsError);
     expect(() => parseCliFlags(["--backtest-db", "./x.db"])).toThrow(CliFlagsError);
     expect(() => parseCliFlags(["--backtest-report", "./x.json"])).toThrow(CliFlagsError);
+    expect(() => parseCliFlags(["--backtest-labels", "./labels.jsonl"])).toThrow(CliFlagsError);
   });
 
   it("rejects invalid backtest limits", () => {

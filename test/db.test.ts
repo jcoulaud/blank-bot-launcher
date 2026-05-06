@@ -2,8 +2,25 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import type { Tweet } from "../src/sources/tweet-source.js";
 import { type Decision, isoDateUtc, Store } from "../src/store/db.js";
 import { seedLaunch } from "./helpers/db-helpers.js";
+
+function fakeTweet(overrides: Partial<Tweet> = {}): Tweet {
+  return {
+    id: "t1",
+    authorHandle: "elonmusk",
+    authorId: "1",
+    text: "doge",
+    createdAt: new Date("2026-05-06T12:00:00Z"),
+    media: [],
+    images: [],
+    isReply: false,
+    isRetweet: false,
+    isQuoteTweet: false,
+    ...overrides,
+  };
+}
 
 describe("Store", () => {
   let tmp: string;
@@ -313,6 +330,62 @@ describe("Store", () => {
     expect(seen).toHaveLength(1);
     expect(seen[0]?.decision).toBe("launched");
     expect(seen[0]?.classifier_score).toBe(0.95);
+  });
+
+  it("queues pending tweets, claims them once, and reclaims stale locks", () => {
+    const t = fakeTweet({ images: [{ url: "https://pbs.twimg.com/media/img.jpg" }] });
+    store.enqueuePendingTweet(t, 1000);
+    expect(store.pendingSummary()).toEqual({ queued: 1, locked: 0 });
+
+    const first = store.claimNextPendingTweet(2000, 10_000);
+    expect(first?.tweet.id).toBe("t1");
+    expect(first?.tweet.images).toHaveLength(1);
+    expect(store.pendingSummary()).toEqual({ queued: 1, locked: 1 });
+    expect(store.claimNextPendingTweet(2500, 10_000)).toBeNull();
+
+    const stale = store.claimNextPendingTweet(13_000, 10_000);
+    expect(stale?.tweet_id).toBe("t1");
+    expect(stale?.attempts).toBe(2);
+    store.completePendingTweet("t1");
+    expect(store.pendingSummary()).toEqual({ queued: 0, locked: 0 });
+  });
+
+  it("records pipeline events and dashboard telemetry", () => {
+    store.recordSeen({
+      tweet_id: "t1",
+      author_handle: "elonmusk",
+      seen_at: 1000,
+      classifier_score: 0.91,
+      decision: "dry_run",
+      reason: "memeable",
+      media_type: "tweet_image",
+    });
+    store.recordPipelineEvent({
+      tweetId: "t1",
+      authorHandle: "elonmusk",
+      stage: "classify",
+      status: "ok",
+      startedAt: 1000,
+      finishedAt: 1033,
+    });
+    store.recordPipelineEvent({
+      tweetId: "t2",
+      authorHandle: "sama",
+      stage: "metadata",
+      status: "error",
+      startedAt: 2000,
+      finishedAt: 2050,
+      detail: "rate limit",
+    });
+
+    const telemetry = store.dashboardTelemetry();
+    expect(telemetry.stageMetrics.find((row) => row.stage === "classify")?.runs).toBe(1);
+    expect(telemetry.stageMetrics.find((row) => row.stage === "metadata")?.errors).toBe(1);
+    expect(telemetry.decisionCounts).toContainEqual({ decision: "dry_run", count: 1 });
+    expect(telemetry.scoreBuckets).toContainEqual({ bucket: "0.85-0.94", count: 1 });
+    expect(telemetry.accountStats[0]?.author_handle).toBe("elonmusk");
+    expect(telemetry.mediaStats[0]?.media_type).toBe("tweet_image");
+    expect(telemetry.recentErrors[0]?.detail).toBe("rate limit");
   });
 });
 

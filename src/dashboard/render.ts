@@ -4,6 +4,7 @@ import { fileURLToPath } from "node:url";
 import { ExternalLink } from "lucide-static";
 import type {
   DailyCounter,
+  DashboardTelemetry,
   Decision,
   LaunchRecord,
   LaunchTotals,
@@ -90,6 +91,7 @@ export function renderHome(args: {
   launchesPage: number;
   launchesPageSize: number;
   launchesTotal: number;
+  telemetry: DashboardTelemetry;
   balanceSol: number;
   balanceStale?: boolean;
   walletPubkey: string;
@@ -120,6 +122,12 @@ export function renderHome(args: {
     )
     .join("");
   const xApiCostRows = renderXApiCostRows(args.xApiUsage);
+  const stageRows = renderStageRows(args.telemetry);
+  const decisionRows = renderDecisionRows(args.telemetry);
+  const scoreRows = renderScoreRows(args.telemetry);
+  const accountRows = renderAccountRows(args.telemetry);
+  const mediaRows = renderMediaRows(args.telemetry);
+  const errorRows = renderErrorRows(args.telemetry);
 
   const body = `
     <h1 class="display">Live launcher status.</h1>
@@ -158,6 +166,83 @@ export function renderHome(args: {
             <p class="stat-value">${formatUsd(args.xApiUsage.total.cost_usd)}</p>
             <p class="stat-detail">${args.xApiUsage.total.resources} reads; today ${formatUsd(args.xApiUsage.today.cost_usd)}</p>
           </div>
+          <div class="stat">
+            <p class="stat-label">Queue</p>
+            <p class="stat-value">${args.telemetry.pending.queued}</p>
+            <p class="stat-detail">${args.telemetry.pending.locked} locked</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="section section-tight">
+      <h2 class="h2" id="pipeline">Pipeline health</h2>
+      <div class="table-card">
+        <div class="table-scroll">
+          <table>
+            <thead><tr>
+              <th>Stage</th><th class="col-num">Runs</th><th class="col-num">Errors</th><th class="col-num">Avg ms</th><th class="col-num">Max ms</th>
+            </tr></thead>
+            <tbody>${stageRows || `<tr><td colspan="5" class="empty">No pipeline events yet.</td></tr>`}</tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <div class="section section-tight">
+      <h2 class="h2" id="calibration">Classifier telemetry</h2>
+      <div class="split-tables">
+        <div class="table-card">
+          <div class="table-scroll">
+            <table>
+              <thead><tr><th>Decision</th><th class="col-num">Count</th></tr></thead>
+              <tbody>${decisionRows || `<tr><td colspan="2" class="empty">No decisions yet.</td></tr>`}</tbody>
+            </table>
+          </div>
+        </div>
+        <div class="table-card">
+          <div class="table-scroll">
+            <table>
+              <thead><tr><th>Score bucket</th><th class="col-num">Count</th></tr></thead>
+              <tbody>${scoreRows || `<tr><td colspan="2" class="empty">No scores yet.</td></tr>`}</tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="section section-tight">
+      <h2 class="h2" id="slices">Account and media slices</h2>
+      <div class="split-tables">
+        <div class="table-card">
+          <div class="table-scroll">
+            <table>
+              <thead><tr><th>Account</th><th class="col-num">Seen</th><th class="col-num">Launch</th><th class="col-num">Avg</th></tr></thead>
+              <tbody>${accountRows || `<tr><td colspan="4" class="empty">No accounts yet.</td></tr>`}</tbody>
+            </table>
+          </div>
+        </div>
+        <div class="table-card">
+          <div class="table-scroll">
+            <table>
+              <thead><tr><th>Media</th><th class="col-num">Seen</th><th class="col-num">Launch</th><th class="col-num">Skip</th></tr></thead>
+              <tbody>${mediaRows || `<tr><td colspan="4" class="empty">No media stats yet.</td></tr>`}</tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="section section-tight">
+      <h2 class="h2" id="errors">Recent errors and pauses</h2>
+      <div class="table-card">
+        <div class="table-scroll">
+          <table>
+            <thead><tr>
+              <th>Stage</th><th>Status</th><th>When</th><th>Detail</th>
+            </tr></thead>
+            <tbody>${errorRows || `<tr><td colspan="4" class="empty">No recent errors.</td></tr>`}</tbody>
+          </table>
         </div>
       </div>
     </div>
@@ -370,6 +455,92 @@ function renderXApiCostRows(summary: XApiUsageSummary): string {
       <td class="col-num">${formatUsd(total.cost_usd)}</td>
     </tr>`;
   }).join("");
+}
+
+function renderStageRows(telemetry: DashboardTelemetry): string {
+  return telemetry.stageMetrics
+    .map(
+      (row) => `<tr>
+        <td>${esc(row.stage)}</td>
+        <td class="col-num">${row.runs}</td>
+        <td class="col-num">${row.errors}</td>
+        <td class="col-num">${Math.round(row.avg_duration_ms)}</td>
+        <td class="col-num">${Math.round(row.max_duration_ms)}</td>
+      </tr>`,
+    )
+    .join("");
+}
+
+function renderDecisionRows(telemetry: DashboardTelemetry): string {
+  return telemetry.decisionCounts
+    .map(
+      (row) => `<tr>
+        <td><span class="pill ${isDecision(row.decision) ? pillClass(row.decision) : ""}">${esc(row.decision)}</span></td>
+        <td class="col-num">${row.count}</td>
+      </tr>`,
+    )
+    .join("");
+}
+
+function renderScoreRows(telemetry: DashboardTelemetry): string {
+  return telemetry.scoreBuckets
+    .map(
+      (row) => `<tr>
+        <td>${esc(row.bucket)}</td>
+        <td class="col-num">${row.count}</td>
+      </tr>`,
+    )
+    .join("");
+}
+
+function renderAccountRows(telemetry: DashboardTelemetry): string {
+  return telemetry.accountStats
+    .map(
+      (row) => `<tr>
+        <td>@${esc(row.author_handle)}</td>
+        <td class="col-num">${row.total}</td>
+        <td class="col-num">${row.launched + row.dry_run}</td>
+        <td class="col-num">${row.avg_score === null ? '<span class="mute">-</span>' : row.avg_score.toFixed(2)}</td>
+      </tr>`,
+    )
+    .join("");
+}
+
+function renderMediaRows(telemetry: DashboardTelemetry): string {
+  return telemetry.mediaStats
+    .map(
+      (row) => `<tr>
+        <td>${esc(row.media_type)}</td>
+        <td class="col-num">${row.total}</td>
+        <td class="col-num">${row.launched + row.dry_run}</td>
+        <td class="col-num">${row.skipped}</td>
+      </tr>`,
+    )
+    .join("");
+}
+
+function renderErrorRows(telemetry: DashboardTelemetry): string {
+  return telemetry.recentErrors
+    .map(
+      (row) => `<tr>
+        <td>${esc(row.stage)}</td>
+        <td><span class="pill ${row.status === "error" ? "pill-error" : "pill-safety"}">${esc(row.status)}</span></td>
+        <td class="col-when">${esc(formatTime(row.finished_at))}</td>
+        <td class="col-reason">${esc(formatReason(row.detail))}</td>
+      </tr>`,
+    )
+    .join("");
+}
+
+function isDecision(value: string): value is Decision {
+  return [
+    "launched",
+    "skipped_low_score",
+    "skipped_safety",
+    "skipped_validation",
+    "skipped_error",
+    "dry_run",
+  ].includes(value);
 }
 
 function findUsageLine(

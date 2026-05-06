@@ -37,6 +37,10 @@ export type PreparedImage = {
   source: "tweet" | "remix" | "generated";
 };
 
+export type ImageValidation =
+  | { ok: true; mimeType: string; width: number; height: number }
+  | { ok: false; reason: string };
+
 /**
  * Decide-and-fetch the image bytes for the launch.
  * Honors imageStrategy from the metadata generator. On reuse/remix failure,
@@ -85,6 +89,32 @@ export async function prepareImage(
   return generateFromPrompt(meta, options, log);
 }
 
+export function validateLaunchImage(image: PreparedImage): ImageValidation {
+  if (image.buffer.length === 0) return { ok: false, reason: "image buffer is empty" };
+  if (image.buffer.length > MAX_DOWNLOAD_BYTES) {
+    return {
+      ok: false,
+      reason: `image buffer ${image.buffer.length} bytes exceeds ${MAX_DOWNLOAD_BYTES} byte cap`,
+    };
+  }
+
+  const mimeType = normalizeImageMimeType(image.mimeType);
+  if (!mimeType) return { ok: false, reason: `unsupported image MIME type: ${image.mimeType}` };
+
+  const dimensions = readImageDimensions(image.buffer, mimeType);
+  if (!dimensions) return { ok: false, reason: `could not read ${mimeType} image dimensions` };
+
+  const ratio = dimensions.width / dimensions.height;
+  if (ratio < 0.95 || ratio > 1.05) {
+    return {
+      ok: false,
+      reason: `image must be square-ish for token icon use; got ${dimensions.width}x${dimensions.height}`,
+    };
+  }
+
+  return { ok: true, mimeType, width: dimensions.width, height: dimensions.height };
+}
+
 async function generateFromPrompt(
   meta: Metadata,
   options: ImageOptions,
@@ -117,6 +147,115 @@ async function generateFromPrompt(
 
 function buildSafeFallbackPrompt(meta: Metadata): string {
   return `Create a ${SAFE_FALLBACK_IMAGE_STYLE} for a token named "${meta.name}" with ticker ${meta.symbol}. ${FRAMING_RULES}`;
+}
+
+function normalizeImageMimeType(mimeType: string): string | null {
+  const base = mimeType.split(";", 1)[0]?.trim().toLowerCase();
+  if (base === "image/jpg") return "image/jpeg";
+  if (
+    base === "image/png" ||
+    base === "image/jpeg" ||
+    base === "image/gif" ||
+    base === "image/webp"
+  ) {
+    return base;
+  }
+  return null;
+}
+
+function readImageDimensions(
+  buffer: Buffer,
+  mimeType: string,
+): { width: number; height: number } | null {
+  if (mimeType === "image/png") return readPngDimensions(buffer);
+  if (mimeType === "image/jpeg") return readJpegDimensions(buffer);
+  if (mimeType === "image/gif") return readGifDimensions(buffer);
+  if (mimeType === "image/webp") return readWebpDimensions(buffer);
+  return null;
+}
+
+function readPngDimensions(buffer: Buffer): { width: number; height: number } | null {
+  if (buffer.length < 24) return null;
+  if (
+    !buffer.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]))
+  ) {
+    return null;
+  }
+  return { width: buffer.readUInt32BE(16), height: buffer.readUInt32BE(20) };
+}
+
+function readGifDimensions(buffer: Buffer): { width: number; height: number } | null {
+  if (buffer.length < 10) return null;
+  const signature = buffer.toString("ascii", 0, 6);
+  if (signature !== "GIF87a" && signature !== "GIF89a") return null;
+  return { width: buffer.readUInt16LE(6), height: buffer.readUInt16LE(8) };
+}
+
+function readWebpDimensions(buffer: Buffer): { width: number; height: number } | null {
+  if (buffer.length < 30) return null;
+  if (buffer.toString("ascii", 0, 4) !== "RIFF" || buffer.toString("ascii", 8, 12) !== "WEBP") {
+    return null;
+  }
+  const chunk = buffer.toString("ascii", 12, 16);
+  if (chunk === "VP8X" && buffer.length >= 30) {
+    return {
+      width: 1 + buffer.readUIntLE(24, 3),
+      height: 1 + buffer.readUIntLE(27, 3),
+    };
+  }
+  if (chunk === "VP8 " && buffer.length >= 30) {
+    return {
+      width: buffer.readUInt16LE(26) & 0x3fff,
+      height: buffer.readUInt16LE(28) & 0x3fff,
+    };
+  }
+  if (chunk === "VP8L" && buffer.length >= 25) {
+    const b0 = buffer[21];
+    const b1 = buffer[22];
+    const b2 = buffer[23];
+    const b3 = buffer[24];
+    if (b0 === undefined || b1 === undefined || b2 === undefined || b3 === undefined) return null;
+    return {
+      width: 1 + (((b1 & 0x3f) << 8) | b0),
+      height: 1 + ((b3 << 6) | (b2 >> 2) | ((b1 & 0xc0) << 6)),
+    };
+  }
+  return null;
+}
+
+function readJpegDimensions(buffer: Buffer): { width: number; height: number } | null {
+  if (buffer.length < 4 || buffer[0] !== 0xff || buffer[1] !== 0xd8) return null;
+  let offset = 2;
+  while (offset < buffer.length) {
+    if (buffer[offset] !== 0xff) return null;
+    while (offset < buffer.length && buffer[offset] === 0xff) offset += 1;
+    const marker = buffer[offset];
+    if (marker === undefined) return null;
+    offset += 1;
+    if (marker === 0xd9 || marker === 0xda) return null;
+    if (marker === 0x01 || (marker >= 0xd0 && marker <= 0xd7)) continue;
+    if (offset + 2 > buffer.length) return null;
+    const length = buffer.readUInt16BE(offset);
+    if (length < 2 || offset + length > buffer.length) return null;
+    if (isJpegStartOfFrame(marker)) {
+      if (length < 7) return null;
+      return {
+        height: buffer.readUInt16BE(offset + 3),
+        width: buffer.readUInt16BE(offset + 5),
+      };
+    }
+    offset += length;
+  }
+  return null;
+}
+
+function isJpegStartOfFrame(marker: number): boolean {
+  return (
+    (marker >= 0xc0 && marker <= 0xc3) ||
+    (marker >= 0xc5 && marker <= 0xc7) ||
+    (marker >= 0xc9 && marker <= 0xcb) ||
+    (marker >= 0xcd && marker <= 0xcf)
+  );
 }
 
 type GeminiImageRequest = {

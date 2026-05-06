@@ -36,6 +36,13 @@ const envSchema = z.object({
   LOG_LEVEL: z.enum(["trace", "debug", "info", "warn", "error", "fatal"]).default("info"),
   SKIP_OLDER_THAN_S: z.coerce.number().int().positive().default(300),
   STAKING_SHARE_BPS: z.coerce.number().int().min(0).max(10000).default(8000),
+  PENDING_LOCK_STALE_S: z.coerce.number().int().positive().default(300),
+  CIRCUIT_BREAKER_WINDOW_S: z.coerce.number().int().positive().default(900),
+  CIRCUIT_BREAKER_PAUSE_S: z.coerce.number().int().positive().default(60),
+  MAX_CONSECUTIVE_PROVIDER_ERRORS: z.coerce.number().int().positive().default(3),
+  MAX_CONSECUTIVE_IPFS_ERRORS: z.coerce.number().int().positive().default(3),
+  MAX_CONSECUTIVE_LAUNCH_ERRORS: z.coerce.number().int().positive().default(2),
+  MAX_X_API_USD_PER_DAY: z.coerce.number().positive().default(25),
 
   // Optional, off by default
   DASHBOARD_PORT: z.coerce.number().int().positive().optional(),

@@ -1,7 +1,7 @@
 import type { google } from "@ai-sdk/google";
 import type { Connection, Keypair } from "@solana/web3.js";
 import { type Classification, classifyTweet, passesThreshold } from "./brain/classifier.js";
-import { type PreparedImage, prepareImage } from "./brain/image.js";
+import { type PreparedImage, prepareImage, validateLaunchImage } from "./brain/image.js";
 import { generateTokenMetadata, type Metadata } from "./brain/metadata.js";
 import type { Env } from "./config.js";
 import {
@@ -19,7 +19,12 @@ import {
 } from "./launcher/pinata.js";
 import { getLogger } from "./logger.js";
 import { checkSafety, type SafetyDecision } from "./safety/safety.js";
-import { hasAttachedVideo, isQuoteReactionOnly, type Tweet } from "./sources/tweet-source.js";
+import {
+  hasAttachedVideo,
+  isQuoteReactionOnly,
+  type Tweet,
+  tweetMediaType,
+} from "./sources/tweet-source.js";
 import type { Decision, Store } from "./store/db.js";
 import { errMsg } from "./util/errors.js";
 import { mimeToExt } from "./util/mime.js";
@@ -50,6 +55,8 @@ export type PipelineResult = {
     source: PreparedImage["source"];
     mimeType: string;
     bytes: number;
+    width?: number;
+    height?: number;
   };
   safety?: SafetyDecision;
   dryRun?: {
@@ -73,6 +80,23 @@ export async function runPipeline(tweet: Tweet, deps: PipelineDeps): Promise<Pip
     reason,
     ...extra,
   });
+  const mediaType = tweetMediaType(tweet);
+  const recordStage = (
+    stage: string,
+    status: "ok" | "skipped" | "blocked" | "error",
+    startedAt: number,
+    detail?: string,
+  ): void => {
+    deps.store.recordPipelineEvent({
+      tweetId: tweet.id,
+      authorHandle: tweet.authorHandle,
+      stage,
+      status,
+      startedAt,
+      finishedAt: Date.now(),
+      ...(detail ? { detail } : {}),
+    });
+  };
 
   // Keep every terminal skip path writing the same tweets_seen shape.
   const skip = (
@@ -88,6 +112,7 @@ export async function runPipeline(tweet: Tweet, deps: PipelineDeps): Promise<Pip
       classifier_score,
       decision,
       reason,
+      media_type: mediaType,
     });
     return finish(decision, reason, extra);
   };
@@ -98,29 +123,35 @@ export async function runPipeline(tweet: Tweet, deps: PipelineDeps): Promise<Pip
       log.info("already seen, but --force overrides dedup");
     } else {
       log.info("already seen, skipping (use --force to re-process)");
+      recordStage("dedup", "skipped", seenAt, "already_seen");
       return finish("duplicate", "already_seen");
     }
   }
 
   if (hasAttachedVideo(tweet)) {
     log.info("tweet has attached video media, skipping");
+    recordStage("validation", "blocked", seenAt, "video_media_attached");
     return skip("skipped_validation", "video_media_attached");
   }
 
   if (isQuoteReactionOnly(tweet)) {
     log.info("quote tweet has reaction-only commentary, skipping");
+    recordStage("validation", "blocked", seenAt, "quote_reaction_only");
     return skip("skipped_validation", "quote_reaction_only");
   }
 
   // Stage 1: classify.
   let classification: Classification;
+  let stageStartedAt = Date.now();
   try {
     classification = await classifyTweet(tweet, {
       model: deps.llmModel,
       threshold: deps.env.CLASSIFIER_THRESHOLD,
     });
+    recordStage("classify", "ok", stageStartedAt);
   } catch (err) {
     log.error({ err: errMsg(err) }, "classifier error");
+    recordStage("classify", "error", stageStartedAt, errMsg(err));
     return skip("skipped_error", `classifier: ${errMsg(err)}`);
   }
   const score = classification.confidence;
@@ -132,6 +163,7 @@ export async function runPipeline(tweet: Tweet, deps: PipelineDeps): Promise<Pip
         "below threshold, but --force overrides",
       );
     } else {
+      recordStage("threshold", "blocked", Date.now(), classification.reason);
       return skip("skipped_low_score", classification.reason, score, { classification });
     }
   }
@@ -139,6 +171,7 @@ export async function runPipeline(tweet: Tweet, deps: PipelineDeps): Promise<Pip
   // Stage 2: metadata generation. One validation retry is handled inside
   // generateTokenMetadata().
   let metadata: Metadata;
+  stageStartedAt = Date.now();
   try {
     const metaResult = await generateTokenMetadata(tweet, {
       model: deps.llmModel,
@@ -146,6 +179,7 @@ export async function runPipeline(tweet: Tweet, deps: PipelineDeps): Promise<Pip
     });
     if (!metaResult.ok) {
       log.warn({ failure: metaResult.finalFailure }, "metadata validation failed twice");
+      recordStage("metadata", "blocked", stageStartedAt, metaResult.finalFailure.reason);
       return skip(
         "skipped_validation",
         `${metaResult.finalFailure.field}: ${metaResult.finalFailure.reason}`,
@@ -154,26 +188,42 @@ export async function runPipeline(tweet: Tweet, deps: PipelineDeps): Promise<Pip
       );
     }
     metadata = metaResult.metadata;
+    recordStage("metadata", "ok", stageStartedAt);
   } catch (err) {
     log.error({ err: errMsg(err) }, "metadata generation threw");
+    recordStage("metadata", "error", stageStartedAt, errMsg(err));
     return skip("skipped_error", `metadata: ${errMsg(err)}`, score, { classification });
   }
 
   // Stage 3: image.
   let image: PreparedImage;
+  stageStartedAt = Date.now();
   try {
     image = await prepareImage(tweet, metadata, {
       apiKey: deps.env.GOOGLE_GENERATIVE_AI_API_KEY,
       model: deps.env.IMAGE_MODEL,
     });
+    recordStage("image", "ok", stageStartedAt);
   } catch (err) {
     log.error({ err: errMsg(err) }, "image preparation failed");
+    recordStage("image", "error", stageStartedAt, errMsg(err));
     return skip("skipped_error", `image: ${errMsg(err)}`, score, { classification, metadata });
+  }
+  const imageValidation = validateLaunchImage(image);
+  if (!imageValidation.ok) {
+    log.warn({ reason: imageValidation.reason }, "image validation failed");
+    recordStage("image_validation", "blocked", Date.now(), imageValidation.reason);
+    return skip("skipped_validation", `image_validation: ${imageValidation.reason}`, score, {
+      classification,
+      metadata,
+    });
   }
   const imageSummary = {
     source: image.source,
-    mimeType: image.mimeType,
+    mimeType: imageValidation.mimeType,
     bytes: image.buffer.length,
+    width: imageValidation.width,
+    height: imageValidation.height,
   };
 
   if (deps.backtest) {
@@ -197,6 +247,7 @@ export async function runPipeline(tweet: Tweet, deps: PipelineDeps): Promise<Pip
   // Caps (count + sol + per-launch), balance, RPC reach.
   const plannedSpend = deps.env.MAX_SOL_PER_LAUNCH;
   let safety: SafetyDecision;
+  stageStartedAt = Date.now();
   try {
     safety = await checkSafety({
       env: deps.env,
@@ -206,8 +257,15 @@ export async function runPipeline(tweet: Tweet, deps: PipelineDeps): Promise<Pip
       plannedSpendSol: plannedSpend,
       now: Date.now(),
     });
+    recordStage(
+      "safety",
+      safety.ok ? "ok" : "blocked",
+      stageStartedAt,
+      safety.ok ? undefined : safety.reason,
+    );
   } catch (err) {
     log.error({ err: errMsg(err) }, "safety gate threw");
+    recordStage("safety", "error", stageStartedAt, errMsg(err));
     return skip("skipped_error", `safety: ${errMsg(err)}`, score, {
       classification,
       metadata,
@@ -263,12 +321,13 @@ export async function runPipeline(tweet: Tweet, deps: PipelineDeps): Promise<Pip
   // Stage 6: IPFS uploads.
   let imageCid: string;
   let metadataCid: string;
+  stageStartedAt = Date.now();
   try {
-    const ext = mimeToExt(image.mimeType);
+    const ext = mimeToExt(imageValidation.mimeType);
     imageCid = await uploadImage(
       image.buffer,
       `${symbolForFilename(metadata.symbol)}.${ext}`,
-      image.mimeType,
+      imageValidation.mimeType,
       { jwt: deps.env.PINATA_JWT },
     );
     const tokenMetadata = buildTokenMetadata({
@@ -279,8 +338,10 @@ export async function runPipeline(tweet: Tweet, deps: PipelineDeps): Promise<Pip
     });
     metadataCid = await uploadMetadata(tokenMetadata, { jwt: deps.env.PINATA_JWT });
     await waitForMetadataAvailability(metadataCid, tokenMetadata);
+    recordStage("ipfs", "ok", stageStartedAt);
   } catch (err) {
     log.error({ err: errMsg(err) }, "IPFS upload failed");
+    recordStage("ipfs", "error", stageStartedAt, errMsg(err));
     rollbackIfReserved();
     return skip("skipped_error", `ipfs: ${errMsg(err)}`, score, {
       classification,
@@ -294,6 +355,7 @@ export async function runPipeline(tweet: Tweet, deps: PipelineDeps): Promise<Pip
 
   // Stage 7: launch. Dry runs stop here after IPFS writes.
   if (deps.dryRun || !deps.blankClient) {
+    recordStage("launch", "skipped", Date.now(), "dry-run");
     log.info(
       {
         metadata_uri: metadataUri,
@@ -319,6 +381,7 @@ export async function runPipeline(tweet: Tweet, deps: PipelineDeps): Promise<Pip
   }
 
   let result: LaunchCreateResult;
+  stageStartedAt = Date.now();
   try {
     result = await launchToken({
       client: deps.blankClient,
@@ -328,9 +391,11 @@ export async function runPipeline(tweet: Tweet, deps: PipelineDeps): Promise<Pip
       metadataUri,
       stakingShareBps: deps.env.STAKING_SHARE_BPS,
     });
+    recordStage("launch", "ok", stageStartedAt);
   } catch (err) {
     const safeMsg = safeLaunchErrorMessage(err);
     log.error({ err: safeMsg }, "blank.launch.create failed");
+    recordStage("launch", "error", stageStartedAt, safeMsg);
     rollbackIfReserved();
     return skip("skipped_error", `launch: ${safeMsg}`, score, {
       classification,
@@ -348,11 +413,20 @@ export async function runPipeline(tweet: Tweet, deps: PipelineDeps): Promise<Pip
   // Measure the actual on-chain cost (network fee + program fees + rent)
   // from the wallet's pre/post balance delta across every submitted launch
   // transaction, then reconcile the reserved cap to this exact value.
-  const actualSolSpent = await measureTxCostsSol({
-    connection: deps.connection,
-    signatures: [txSignature, ...result.submission.signatures],
-    payer: deps.wallet.publicKey,
-  });
+  stageStartedAt = Date.now();
+  let actualSolSpent: number;
+  try {
+    actualSolSpent = await measureTxCostsSol({
+      connection: deps.connection,
+      signatures: [txSignature, ...result.submission.signatures],
+      payer: deps.wallet.publicKey,
+    });
+    recordStage("tx_cost", "ok", stageStartedAt);
+  } catch (err) {
+    log.error({ err: errMsg(err) }, "transaction cost measurement failed");
+    recordStage("tx_cost", "error", stageStartedAt, errMsg(err));
+    actualSolSpent = plannedSpend;
+  }
   if (!reservation) {
     throw new Error("live launch reached commit without a reservation");
   }
@@ -377,6 +451,7 @@ export async function runPipeline(tweet: Tweet, deps: PipelineDeps): Promise<Pip
       classifier_score: score,
       decision: "launched",
       reason: classification.reason,
+      media_type: mediaType,
     },
     reservation,
   );

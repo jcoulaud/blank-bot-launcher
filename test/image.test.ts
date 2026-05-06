@@ -1,7 +1,19 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { downloadCappedImage, formatGeminiHttpError } from "../src/brain/image.js";
+import {
+  downloadCappedImage,
+  formatGeminiHttpError,
+  validateLaunchImage,
+} from "../src/brain/image.js";
 
 const originalFetch = globalThis.fetch;
+const VALID_1X1_PNG = Buffer.from(
+  "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/p9sAAAAASUVORK5CYII=",
+  "base64",
+);
+const VALID_10X10_JPEG = Buffer.from([
+  0xff, 0xd8, 0xff, 0xe0, 0x00, 0x04, 0x00, 0x00, 0xff, 0xc0, 0x00, 0x0b, 0x08, 0x00, 0x0a, 0x00,
+  0x0a, 0x01, 0x01, 0x11, 0x00, 0xff, 0xd9,
+]);
 
 function mockFetchOnce(init: {
   status?: number;
@@ -94,6 +106,38 @@ describe("downloadCappedImage", () => {
     await expect(downloadCappedImage("https://pbs.twimg.com/media/missing")).rejects.toThrow(
       /HTTP 404/,
     );
+  });
+});
+
+describe("validateLaunchImage", () => {
+  it("accepts square PNG image bytes and normalizes the MIME type", () => {
+    expect(
+      validateLaunchImage({
+        buffer: VALID_1X1_PNG,
+        mimeType: "image/png; charset=binary",
+        source: "generated",
+      }),
+    ).toEqual({ ok: true, mimeType: "image/png", width: 1, height: 1 });
+  });
+
+  it("accepts square JPEG image bytes and normalizes image/jpg", () => {
+    expect(
+      validateLaunchImage({
+        buffer: VALID_10X10_JPEG,
+        mimeType: "image/jpg",
+        source: "generated",
+      }),
+    ).toEqual({ ok: true, mimeType: "image/jpeg", width: 10, height: 10 });
+  });
+
+  it("rejects buffers whose dimensions cannot be read", () => {
+    const result = validateLaunchImage({
+      buffer: Buffer.from("not an image"),
+      mimeType: "image/png",
+      source: "generated",
+    });
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.reason).toMatch(/dimensions/);
   });
 });
 

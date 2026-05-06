@@ -9,6 +9,7 @@ export type CliFlags = {
   backtestLimit: number;
   backtestDbPath?: string;
   backtestReportPath?: string;
+  backtestLabelsPath?: string;
   dashboardOnly: boolean;
   replayTweetId?: string;
   yes: boolean;
@@ -34,6 +35,7 @@ export function parseCliFlags(argv: string[]): CliFlags {
         "backtest-limit": { type: "string" },
         "backtest-db": { type: "string" },
         "backtest-report": { type: "string" },
+        "backtest-labels": { type: "string" },
         "dashboard-only": { type: "boolean", default: false },
         yes: { type: "boolean", short: "y", default: false },
         force: { type: "boolean", default: false },
@@ -61,6 +63,9 @@ export function parseCliFlags(argv: string[]): CliFlags {
   if (typeof values["backtest-report"] === "string") {
     flags.backtestReportPath = values["backtest-report"];
   }
+  if (typeof values["backtest-labels"] === "string") {
+    flags.backtestLabelsPath = values["backtest-labels"];
+  }
   if (typeof values.replay === "string") flags.replayTweetId = values.replay;
 
   // Skip flag-combination validation when --help is set so `--help --whatever`
@@ -78,6 +83,7 @@ export function parseCliFlags(argv: string[]): CliFlags {
   if (!flags.backtest) {
     if (flags.backtestDbPath) throw new CliFlagsError("--backtest-db requires --backtest.");
     if (flags.backtestReportPath) throw new CliFlagsError("--backtest-report requires --backtest.");
+    if (flags.backtestLabelsPath) throw new CliFlagsError("--backtest-labels requires --backtest.");
     if (values["backtest-limit"] !== undefined) {
       throw new CliFlagsError("--backtest-limit requires --backtest.");
     }
@@ -122,6 +128,8 @@ Usage:
   npm run backtest -- --backtest-limit 50
                                 process up to N eligible tweets per account
                                 (X may return one extra page before reaching N)
+  npm run backtest -- --backtest-labels ./data/labels.jsonl
+                                include labeled precision/recall calibration
   npm run start -- --replay <id>
                                 fetch one tweet by id and run it through the pipeline
   npm run start -- --dashboard-only

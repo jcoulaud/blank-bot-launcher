@@ -103,6 +103,7 @@ export function startDashboard(options: DashboardOptions): { close: () => Promis
     const todayCounter = options.store.getCommittedDailyCounter(now);
     const launchTotals = options.store.getLaunchTotals();
     const xApiUsage = options.store.getXApiUsageSummary(now);
+    const telemetry = options.store.dashboardTelemetry();
     // The reserved counter includes in-flight launches that haven't yet
     // committed (mid-IPFS, mid-launch). The safety gate checks against this
     // value, so the dashboard surfaces it too: an operator looking at
@@ -138,6 +139,7 @@ export function startDashboard(options: DashboardOptions): { close: () => Promis
         launchesPage,
         launchesPageSize: LAUNCHES_PAGE_SIZE,
         launchesTotal,
+        telemetry,
         balanceSol: balance.sol,
         balanceStale: balance.stale,
         walletPubkey: options.wallet.publicKey.toBase58(),

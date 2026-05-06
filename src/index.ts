@@ -3,8 +3,8 @@ import "dotenv/config";
 import { setTimeout as sleep } from "node:timers/promises";
 import { google } from "@ai-sdk/google";
 import { Connection } from "@solana/web3.js";
-import { Mutex } from "async-mutex";
 import { TwitterApi } from "twitter-api-v2";
+import { buildCalibrationReport, loadCalibrationLabels } from "./backtest/calibration.js";
 import {
   type BacktestReportEntry,
   buildBacktestEntry,
@@ -13,16 +13,22 @@ import {
   defaultBacktestReportPath,
   writeBacktestReport,
 } from "./backtest/report.js";
+import { CLASSIFIER_PROMPT_VERSION } from "./brain/prompts.js";
 import { type CliFlags, CliFlagsError, loadKeypair, parseCliFlags, printHelp } from "./cli.js";
 import { type Config, ConfigError, loadConfig } from "./config.js";
 import { startDashboard } from "./dashboard/server.js";
 import { type BlankClient, buildBlankClient } from "./launcher/blank-launcher.js";
 import { getLogger, rootLogger } from "./logger.js";
 import { runPipeline } from "./pipeline.js";
+import {
+  drainPendingTweets,
+  type PendingTweetWorker,
+  startPendingTweetWorker,
+} from "./queue/pending-worker.js";
 import { FilteredStreamSource, parseStreamPayload } from "./sources/filtered-stream.js";
 import { HistoricalTimelineSource } from "./sources/historical-timeline.js";
 import { MockTweetSource } from "./sources/mock.js";
-import type { Tweet, TweetSource } from "./sources/tweet-source.js";
+import { type Tweet, type TweetSource, tweetMediaType } from "./sources/tweet-source.js";
 import { Store } from "./store/db.js";
 import { fetchBalanceWithRetry } from "./util/balance.js";
 import { printBanner } from "./util/banner.js";
@@ -167,25 +173,27 @@ async function main(): Promise<void> {
     return;
   }
 
-  const pipelineMutex = new Mutex();
   const backtestEntries: BacktestReportEntry[] = [];
 
-  const processTweet = async (tweet: Tweet): Promise<void> => {
-    // Serialize the launch pipeline so two tweets cannot spend against stale caps.
-    const result = await pipelineMutex.runExclusive(async () => {
-      return runPipeline(tweet, {
-        env,
-        store,
-        connection,
-        wallet,
-        llmModel,
-        blankClient,
-        dryRun: effectiveDryRun,
-        force: flags.force,
-        backtest: flags.backtest,
-      });
+  const runQueuedTweet = async (tweet: Tweet): Promise<void> => {
+    const result = await runPipeline(tweet, {
+      env,
+      store,
+      connection,
+      wallet,
+      llmModel,
+      blankClient,
+      dryRun: effectiveDryRun,
+      force: flags.force,
+      backtest: flags.backtest,
     });
     if (flags.backtest) backtestEntries.push(buildBacktestEntry(tweet, result));
+  };
+
+  let liveWorker: PendingTweetWorker | undefined;
+  const enqueueTweet = async (tweet: Tweet): Promise<void> => {
+    store.enqueuePendingTweet(tweet);
+    liveWorker?.wake();
   };
 
   const recordPipelineError = (tweet: Tweet, err: unknown): void => {
@@ -197,6 +205,7 @@ async function main(): Promise<void> {
         classifier_score: null,
         decision: "skipped_error",
         reason: `pipeline_threw: ${errMsg(err)}`,
+        media_type: tweetMediaType(tweet),
       });
     } catch (writeErr) {
       rootLogger.error(
@@ -236,19 +245,29 @@ async function main(): Promise<void> {
     });
   }
 
+  if (!flags.backtest && !flags.replayTweetId) {
+    liveWorker = startPendingTweetWorker({
+      env,
+      store,
+      runQueuedTweet,
+      recordPipelineError,
+      circuitBreakersEnabled: !effectiveDryRun,
+    });
+  }
+
   // Graceful shutdown: stop intake, let the active pipeline finish, then exit.
   let shuttingDown = false;
   const shutdown = async (signal: string, exitCode = 0) => {
     if (shuttingDown) return;
     shuttingDown = true;
-    rootLogger.info({ signal, pipeline_busy: pipelineMutex.isLocked() }, "shutdown initiated");
+    rootLogger.info({ signal, queue: store.pendingSummary() }, "shutdown initiated");
     try {
       await source
         .stop()
         .catch((err) => rootLogger.error({ err: errMsg(err) }, "source.stop failed"));
 
       const timeoutMs = env.SHUTDOWN_TIMEOUT_S * 1000;
-      const drain = pipelineMutex.waitForUnlock();
+      const drain = liveWorker?.stop() ?? Promise.resolve();
       const result = await Promise.race([
         drain.then(() => "drained" as const),
         sleep(timeoutMs).then(() => "timeout" as const),
@@ -286,7 +305,7 @@ async function main(): Promise<void> {
   });
 
   try {
-    await source.start(processTweet);
+    await source.start(enqueueTweet);
   } catch (err) {
     if (err instanceof Error && err.name === "XStreamAccessError") {
       console.error(`\n${err.message}\n`);
@@ -297,16 +316,40 @@ async function main(): Promise<void> {
 
   if (flags.replayTweetId) {
     // Replay completes when the mock has dispatched its queued tweet.
+    await drainPendingTweets({
+      env,
+      store,
+      runQueuedTweet,
+      recordPipelineError,
+      staleAfterMs: env.PENDING_LOCK_STALE_S * 1000,
+    });
     rootLogger.info("replay complete");
     await shutdown("REPLAY_DONE");
   }
 
   if (flags.backtest) {
+    await drainPendingTweets({
+      env,
+      store,
+      runQueuedTweet,
+      recordPipelineError,
+      staleAfterMs: env.PENDING_LOCK_STALE_S * 1000,
+    });
+    const calibration =
+      flags.backtestLabelsPath !== undefined
+        ? buildCalibrationReport({
+            entries: backtestEntries,
+            labels: loadCalibrationLabels(flags.backtestLabelsPath),
+            labelsPath: flags.backtestLabelsPath,
+            promptVersion: CLASSIFIER_PROMPT_VERSION,
+          })
+        : undefined;
     const report = buildBacktestReport({
       accounts,
       perAccountLimit: flags.backtestLimit,
       entries: backtestEntries,
       now: backtestStartedAt,
+      ...(calibration ? { calibration } : {}),
     });
     const reportPath = writeBacktestReport(
       flags.backtestReportPath ?? defaultBacktestReportPath(backtestStartedAt),
