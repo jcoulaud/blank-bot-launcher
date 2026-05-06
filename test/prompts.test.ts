@@ -20,6 +20,10 @@ const sampleTweet: Tweet = {
 const sampleClassification = {
   shouldLaunch: true,
   confidence: 0.95,
+  launchableMeme: true,
+  memeSource: "tweet_text" as const,
+  visualAssessment: "none" as const,
+  disqualifiers: [],
   reason: "sticky doge catchphrase with obvious ticker energy",
 };
 
@@ -60,6 +64,17 @@ describe("buildClassifierPrompt", () => {
       },
     };
     expect(buildClassifierPrompt(withQuotedImg)).toContain("Has image: yes (quoted tweet)");
+  });
+
+  it("calibrates market charts, AI screenshots, and image-text extraction as rejects", () => {
+    const prompt = buildClassifierPrompt(sampleTweet);
+    expect(prompt).toContain("market_data_or_chart");
+    expect(prompt).toContain("app_or_ai_screenshot");
+    expect(prompt).toContain("image_text_extraction_only");
+    expect(prompt).toContain(
+      "Do NOT launch a token named after any asset/ticker appearing inside them",
+    );
+    expect(prompt).toContain("emoji reaction to an analytics chart");
   });
 });
 
@@ -121,6 +136,7 @@ describe("buildMetadataPrompt", () => {
     });
 
     expect(prompt).toContain("Classifier meme read");
+    expect(prompt).toContain("Classifier hard-gate details");
     expect(prompt).toContain(sampleClassification.reason);
     expect(prompt).toContain("Quoted tweet author: pumpfun");
     expect(prompt).toContain("communities in control?");

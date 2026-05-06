@@ -48,6 +48,30 @@ const RESERVED_SYMBOLS = ["SOL", "USDC", "BLNK"] as const;
 export type ClassificationContext = {
   shouldLaunch: boolean;
   confidence: number;
+  launchableMeme: boolean;
+  memeSource: "tweet_text" | "tweet_image" | "tweet_and_image" | "quoted_tweet" | "none";
+  visualAssessment:
+    | "none"
+    | "meme_template"
+    | "reaction_image"
+    | "visual_joke_subject"
+    | "ordinary_photo_or_video"
+    | "market_data_or_chart"
+    | "app_or_ai_screenshot"
+    | "announcement_or_product_ui"
+    | "unclear_or_irrelevant";
+  disqualifiers: Array<
+    | "announcement_or_promo"
+    | "app_or_ai_screenshot"
+    | "image_text_extraction_only"
+    | "informational_or_technical"
+    | "market_data_or_chart"
+    | "no_self_contained_joke"
+    | "normal_conversation"
+    | "prompt_injection"
+    | "reserved_or_existing_ticker"
+    | "unclear_joke"
+  >;
   reason: string;
 };
 
@@ -55,36 +79,48 @@ const CLASSIFIER_FEW_SHOT = `
 Examples (study these - they set the bar):
 
 1) Tweet: "Size does matter" - author: elonmusk - has image: yes (suggestive visual)
-   => shouldLaunch=true, confidence=0.95
+   => shouldLaunch=true, confidence=0.95, launchableMeme=true, memeSource="tweet_and_image", visualAssessment="visual_joke_subject", disqualifiers=[]
      reason="three-word innuendo + image carrying the joke; instantly tweetable as a phrase, perfect meme template"
 
 2) Tweet: "Gad's honest truth" - author: elonmusk - has image: no
-   => shouldLaunch=true, confidence=0.9
+   => shouldLaunch=true, confidence=0.9, launchableMeme=true, memeSource="tweet_text", visualAssessment="none", disqualifiers=[]
      reason="deliberate misspelling of 'God's honest truth' referencing Gad Saad - the typo IS the joke; short, punchy, viral-shaped"
 
 3) Tweet: "A case study in suicidal empathy. Read @GadSaad's upcoming book on the subject." - author: elonmusk - has image: no
-   => shouldLaunch=false, confidence=0.15
+   => shouldLaunch=false, confidence=0.15, launchableMeme=false, memeSource="none", visualAssessment="none", disqualifiers=["announcement_or_promo"]
      reason="earnest book recommendation in serious tone; the function of the tweet is promo, not a meme. 'Suicidal empathy' sounds edgy but it's a real concept being soberly endorsed"
 
 4) Tweet: "communities in control?" - author: pumpfun - has image: yes (troll/torture meme)
-   => shouldLaunch=true, confidence=0.93
+   => shouldLaunch=true, confidence=0.93, launchableMeme=true, memeSource="tweet_and_image", visualAssessment="meme_template", disqualifiers=[]
      reason="self-aware question + meme-template image; pumpfun's whole brand is community-driven launches, this is in-joke gold"
 
 5) Tweet: "and just like that I am now an expert in federal non-profit law" - author: pumpfun - has image: yes (apu/pepe)
-   => shouldLaunch=true, confidence=0.9
+   => shouldLaunch=true, confidence=0.9, launchableMeme=true, memeSource="tweet_and_image", visualAssessment="meme_template", disqualifiers=[]
      reason="absurdist self-deprecation + apu meme; classic crypto-Twitter cope cadence, image already does the work"
 
 6) Tweet: "Excited to announce our Series C funding round of $300M led by Sequoia" - author: sama - has image: no
-   => shouldLaunch=false, confidence=0.05
+   => shouldLaunch=false, confidence=0.05, launchableMeme=false, memeSource="none", visualAssessment="none", disqualifiers=["announcement_or_promo"]
      reason="standard fundraising announcement, zero meme energy, earnest corporate tone"
 
 7) Tweet: "Q3 earnings call at 5pm ET. Link in bio." - author: anyone - has image: no
-   => shouldLaunch=false, confidence=0.02
+   => shouldLaunch=false, confidence=0.02, launchableMeme=false, memeSource="none", visualAssessment="none", disqualifiers=["informational_or_technical"]
      reason="boilerplate operational comms"
 
 8) Tweet: "thread on why L2s are mispriced (1/14)" - author: VitalikButerin - has image: no
-   => shouldLaunch=false, confidence=0.1
+   => shouldLaunch=false, confidence=0.1, launchableMeme=false, memeSource="none", visualAssessment="none", disqualifiers=["informational_or_technical"]
      reason="informational thread, not a meme; people read this, they don't trade on it"
+
+9) Tweet: "🔥🔥🔥" quoting "new commodities (gold/oil) markets on @PhoenixTrade" - has quoted image: yes (trading terminal / market table)
+   => shouldLaunch=false, confidence=0.04, launchableMeme=false, memeSource="none", visualAssessment="market_data_or_chart", disqualifiers=["market_data_or_chart","announcement_or_promo","no_self_contained_joke","image_text_extraction_only"]
+     reason="emoji reaction to a market-listing announcement; the table is data, and extracting a ticker from it is not a meme"
+
+10) Tweet: "just look at Norway · $NORWAY" - has image: yes (AI/chat app screenshot)
+    => shouldLaunch=false, confidence=0.08, launchableMeme=false, memeSource="none", visualAssessment="app_or_ai_screenshot", disqualifiers=["app_or_ai_screenshot","no_self_contained_joke","unclear_joke"]
+      reason="generic pointer text plus an AI/app screenshot; no self-contained punchline beyond naming the country"
+
+11) Tweet: "🚂🚂🚂" quoting "From generating just 1% of total network revenue in Q4 2022. To generating 27% in Q1 2026. Solana continues to attract some of the strongest builders in crypto." - has quoted image: yes (network revenue chart/dashboard)
+    => shouldLaunch=false, confidence=0.03, launchableMeme=false, memeSource="none", visualAssessment="market_data_or_chart", disqualifiers=["market_data_or_chart","informational_or_technical","no_self_contained_joke"]
+      reason="emoji reaction to an analytics chart and earnest ecosystem metric commentary; it is bullish information, not a meme"
 `.trim();
 
 const METADATA_FEW_SHOT = `
@@ -213,8 +249,23 @@ Important calibration notes:
 - If the tweet has an image that's already a meme, that's a strong launch signal; the visual asset is half the meme.
 - If the tweet quotes another tweet with an image, treat the quoted image as visual context for the source tweet.
 - If you score borderline (0.6-0.85), default to reject. Missing a weak tweet is better than launching a generic token.
+- A tweet can only launch when the tweet text and/or attached visual form a self-contained joke. If the token idea comes from incidental text inside a screenshot, table, chart, app UI, or AI answer, reject it.
 
-Output: shouldLaunch (bool), confidence (0-1), reason (one short sentence; be specific about WHY).
+HARD visual rejects:
+- Market/data screenshots: trading terminals, token lists, order books, price/volume tables, charts, dashboards, analytics screens, DEX/CEX screens, and terminal-style market UIs. These are data, not memes. Do NOT launch a token named after any asset/ticker appearing inside them.
+- Product/market announcements: new listings, launches, partnerships, feature announcements, and "new markets on X" posts are promo/ops even when the screenshot contains funny tickers.
+- AI/chat/app screenshots: Grok/ChatGPT answers, phone screenshots, browser/app UI, text-message screenshots, and generic UI captures are not meme templates by default. They need a clear, self-contained punchline in the source tweet text; "look at X" or "$TICKER" is not enough.
+- Image-text extraction only: if the best name/symbol would come from OCR-like reading of a table, chart, UI, or screenshot rather than from the tweet's joke, reject.
+- Emoji-only or reaction-only commentary does not make a quoted announcement, market table, chart, or AI/app screenshot memeable.
+
+Output fields:
+- shouldLaunch: true only when this should launch.
+- confidence: 0-1.
+- launchableMeme: true only when the post has a self-contained meme/punchline usable as a memecoin.
+- memeSource: one of "tweet_text", "tweet_image", "tweet_and_image", "quoted_tweet", "none".
+- visualAssessment: one of "none", "meme_template", "reaction_image", "visual_joke_subject", "ordinary_photo_or_video", "market_data_or_chart", "app_or_ai_screenshot", "announcement_or_product_ui", "unclear_or_irrelevant".
+- disqualifiers: zero or more of "announcement_or_promo", "app_or_ai_screenshot", "image_text_extraction_only", "informational_or_technical", "market_data_or_chart", "no_self_contained_joke", "normal_conversation", "prompt_injection", "reserved_or_existing_ticker", "unclear_joke".
+- reason: one short sentence; be specific about WHY.
 Threshold for launch: 0.85.
 
 ${CLASSIFIER_FEW_SHOT}
@@ -372,6 +423,7 @@ ${wrapUntrusted("TEXT", tweet.text, nonce)}
 Author: ${tweet.authorHandle}
 Has image: ${hasImage ? `yes (${imageSource === "tweet" ? "source tweet" : "quoted tweet"})` : "no"}
 Classifier launch decision: shouldLaunch=${classification.shouldLaunch}, confidence=${classification.confidence}
+Classifier hard-gate details: launchableMeme=${classification.launchableMeme}, memeSource=${classification.memeSource}, visualAssessment=${classification.visualAssessment}, disqualifiers=${classification.disqualifiers.join(",") || "none"}
 Classifier meme read:
 ${wrapUntrusted("CLASSIFIER_REASON", classification.reason, nonce)}${quotedContext}${hint}
 `.trim();

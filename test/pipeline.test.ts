@@ -150,6 +150,19 @@ function metadataGatewayResponse(): Response {
   );
 }
 
+function classificationObject(overrides: Record<string, unknown> = {}) {
+  return {
+    shouldLaunch: true,
+    confidence: 0.95,
+    launchableMeme: true,
+    memeSource: "tweet_text",
+    visualAssessment: "none",
+    disqualifiers: [],
+    reason: "memeable",
+    ...overrides,
+  };
+}
+
 function setupHappyMocks(
   submission = { kind: "rpc", signature: "SIG_XYZ", signatures: ["SIG_XYZ"] },
 ) {
@@ -157,7 +170,7 @@ function setupHappyMocks(
   blankCreateMock.mockReset();
   // classify
   generateObjectMock.mockResolvedValueOnce({
-    object: { shouldLaunch: true, confidence: 0.95, reason: "memeable" },
+    object: classificationObject(),
   });
   // metadata
   generateObjectMock.mockResolvedValueOnce({
@@ -278,7 +291,14 @@ describe("runPipeline integration", () => {
   it("low confidence below threshold records skipped_low_score and does not launch", async () => {
     generateObjectMock.mockReset();
     generateObjectMock.mockResolvedValueOnce({
-      object: { shouldLaunch: false, confidence: 0.2, reason: "boring" },
+      object: classificationObject({
+        shouldLaunch: false,
+        confidence: 0.2,
+        launchableMeme: false,
+        memeSource: "none",
+        disqualifiers: ["no_self_contained_joke"],
+        reason: "boring",
+      }),
     });
     const { runPipeline } = await import("../src/pipeline.js");
     await runPipeline(fakeTweet(), {
@@ -299,11 +319,57 @@ describe("runPipeline integration", () => {
     expect(store.getDailyCounter(Date.now()).launches_count).toBe(0);
   });
 
+  it("hard-rejects chart and screenshot disqualifiers before metadata or launch", async () => {
+    generateObjectMock.mockReset();
+    blankCreateMock.mockReset();
+    generateObjectMock.mockResolvedValueOnce({
+      object: classificationObject({
+        confidence: 0.95,
+        visualAssessment: "market_data_or_chart",
+        disqualifiers: ["market_data_or_chart", "no_self_contained_joke"],
+        reason: "emoji reaction to an analytics chart, not a meme",
+      }),
+    });
+    const { runPipeline } = await import("../src/pipeline.js");
+    const result = await runPipeline(
+      {
+        ...fakeTweet(),
+        text: "\u{1F682}\u{1F682}\u{1F682}",
+        isQuoteTweet: true,
+        quotedTweet: {
+          ...fakeTweet(),
+          id: "q1",
+          authorHandle: "lochie_sol",
+          text: "Solana continues to attract some of the strongest builders in crypto.",
+          images: [{ url: "https://pbs.twimg.com/media/revenue-chart.jpg" }],
+        },
+      },
+      {
+        env,
+        store,
+        connection: fakeConnection(1),
+        wallet,
+        // biome-ignore lint/suspicious/noExplicitAny: mocked
+        llmModel: {} as any,
+        // biome-ignore lint/suspicious/noExplicitAny: mocked
+        blankClient: { launch: { create: blankCreateMock } } as any,
+        dryRun: false,
+        force: false,
+      },
+    );
+
+    expect(result.decision).toBe("skipped_low_score");
+    expect(result.reason).toContain("analytics chart");
+    expect(generateObjectMock).toHaveBeenCalledTimes(1);
+    expect(blankCreateMock).not.toHaveBeenCalled();
+    expect(store.recentLaunches(10)).toHaveLength(0);
+  });
+
   it("IPFS failure rolls back the reservation", async () => {
     generateObjectMock.mockReset();
     blankCreateMock.mockReset();
     generateObjectMock.mockResolvedValueOnce({
-      object: { shouldLaunch: true, confidence: 0.95, reason: "memeable" },
+      object: classificationObject(),
     });
     generateObjectMock.mockResolvedValueOnce({
       object: {
@@ -388,7 +454,7 @@ describe("runPipeline integration", () => {
     generateObjectMock.mockReset();
     blankCreateMock.mockReset();
     generateObjectMock.mockResolvedValueOnce({
-      object: { shouldLaunch: true, confidence: 0.95, reason: "memeable" },
+      object: classificationObject(),
     });
     generateObjectMock.mockResolvedValueOnce({
       object: {
@@ -428,7 +494,14 @@ describe("runPipeline integration", () => {
   it("backtest respects the classifier threshold by default", async () => {
     generateObjectMock.mockReset();
     generateObjectMock.mockResolvedValueOnce({
-      object: { shouldLaunch: false, confidence: 0.2, reason: "boring" },
+      object: classificationObject({
+        shouldLaunch: false,
+        confidence: 0.2,
+        launchableMeme: false,
+        memeSource: "none",
+        disqualifiers: ["no_self_contained_joke"],
+        reason: "boring",
+      }),
     });
     globalThis.fetch = vi.fn() as never;
     const { runPipeline } = await import("../src/pipeline.js");
@@ -453,7 +526,7 @@ describe("runPipeline integration", () => {
   it("metadata generator throw is caught and recorded as skipped_error", async () => {
     generateObjectMock.mockReset();
     generateObjectMock.mockResolvedValueOnce({
-      object: { shouldLaunch: true, confidence: 0.95, reason: "memeable" },
+      object: classificationObject(),
     });
     generateObjectMock.mockRejectedValueOnce(new Error("rate limit 429"));
     const { runPipeline } = await import("../src/pipeline.js");

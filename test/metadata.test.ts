@@ -41,6 +41,10 @@ const fourByteChar = String.fromCodePoint(0x1f680);
 const baseClassification: ClassificationContext = {
   shouldLaunch: true,
   confidence: 0.95,
+  launchableMeme: true,
+  memeSource: "tweet_text",
+  visualAssessment: "none",
+  disqualifiers: [],
   reason: "short doge line with obvious ticker energy",
 };
 const metadataOptions = () => ({
