@@ -35,7 +35,6 @@ CREATE TABLE IF NOT EXISTS launches (
   launched_at INTEGER NOT NULL,
   classification_reason TEXT
 );
-CREATE INDEX IF NOT EXISTS idx_launches_author_time ON launches(source_author, launched_at DESC);
 CREATE INDEX IF NOT EXISTS idx_launches_at ON launches(launched_at DESC);
 
 CREATE TABLE IF NOT EXISTS daily_counters (
@@ -391,13 +390,6 @@ export class Store {
       today: this.xApiUsageTotals("WHERE date = ?", [date]),
       total: this.xApiUsageTotals("", []),
     };
-  }
-
-  lastLaunchByAuthor(authorHandle: string): LaunchRecord | null {
-    const row = this.db
-      .prepare("SELECT * FROM launches WHERE source_author = ? ORDER BY launched_at DESC LIMIT 1")
-      .get(authorHandle);
-    return row ? parseRow(LaunchRecordSchema, row) : null;
   }
 
   recentSeen(limit: number, offset = 0): SeenTweet[] {

@@ -1,7 +1,6 @@
 import type { Connection, Keypair } from "@solana/web3.js";
 import { LAMPORTS_PER_SOL } from "@solana/web3.js";
 import { type Env, FLOAT_EPS_SOL } from "../config.js";
-import type { Tweet } from "../sources/tweet-source.js";
 import type { Store } from "../store/db.js";
 import { errMsg } from "../util/errors.js";
 
@@ -9,7 +8,6 @@ export type RejectReason =
   | "daily_count_cap"
   | "daily_sol_cap"
   | "per_launch_cap"
-  | "author_cooldown"
   | "insufficient_balance"
   | "rpc_unavailable";
 
@@ -34,17 +32,15 @@ export type CapsContext = {
 };
 
 /**
- * Pure (no RPC) safety gate over the configured caps and per-author cooldown.
- * Fully unit-testable without a Connection mock.
+ * Pure (no RPC) safety gate over the configured caps. Fully unit-testable
+ * without a Connection mock.
  *
  * Cap order (matters; tests pin this):
  *   1. daily count cap   - hardest stop; cheapest to check
  *   2. daily SOL cap     - aggregate spend across all today's launches
  *   3. per-launch cap    - this single launch's planned spend
- *   4. per-author cooldown - last; needs an author DB lookup
- * The earlier checks short-circuit before we hit the DB for #4.
  */
-export function evaluateCaps(tweet: Tweet, ctx: CapsContext): SafetyDecision {
+export function evaluateCaps(ctx: CapsContext): SafetyDecision {
   const counter = ctx.store.getDailyCounter(ctx.now);
 
   if (counter.launches_count >= ctx.env.MAX_LAUNCHES_PER_DAY) {
@@ -66,19 +62,6 @@ export function evaluateCaps(tweet: Tweet, ctx: CapsContext): SafetyDecision {
       "per_launch_cap",
       `planned=${ctx.plannedSpendSol} > per-launch cap=${ctx.env.MAX_SOL_PER_LAUNCH}`,
     );
-  }
-
-  const last = ctx.store.lastLaunchByAuthor(tweet.authorHandle);
-  if (last) {
-    const cooldownMs = ctx.env.PER_AUTHOR_COOLDOWN_HOURS * 3_600_000;
-    const sinceLast = ctx.now - last.launched_at;
-    if (sinceLast < cooldownMs) {
-      const remainingHours = ((cooldownMs - sinceLast) / 3_600_000).toFixed(1);
-      return reject(
-        "author_cooldown",
-        `last launch from @${tweet.authorHandle} was ${(sinceLast / 3_600_000).toFixed(1)}h ago, cooldown ${ctx.env.PER_AUTHOR_COOLDOWN_HOURS}h, ${remainingHours}h remaining`,
-      );
-    }
   }
 
   // ok=true here just means caps passed; the caller must still check balance.
@@ -114,8 +97,8 @@ export async function checkBalance(
  * Composes evaluateCaps + checkBalance. Kept for callers that want a single
  * call site, including the test suite.
  */
-export async function checkSafety(tweet: Tweet, ctx: SafetyContext): Promise<SafetyDecision> {
-  const caps = evaluateCaps(tweet, ctx);
+export async function checkSafety(ctx: SafetyContext): Promise<SafetyDecision> {
+  const caps = evaluateCaps(ctx);
   if (!caps.ok) return caps;
   return checkBalance(ctx);
 }

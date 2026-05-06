@@ -184,11 +184,11 @@ export async function runPipeline(tweet: Tweet, deps: PipelineDeps): Promise<Pip
   }
 
   // Stage 4: safety.
-  // Caps (count + sol + per-launch + per-author cooldown), balance, RPC reach.
+  // Caps (count + sol + per-launch), balance, RPC reach.
   const plannedSpend = deps.env.MAX_SOL_PER_LAUNCH;
   let safety: SafetyDecision;
   try {
-    safety = await checkSafety(tweet, {
+    safety = await checkSafety({
       env: deps.env,
       store: deps.store,
       connection: deps.connection,

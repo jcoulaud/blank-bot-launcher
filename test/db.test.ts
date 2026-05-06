@@ -171,28 +171,6 @@ describe("Store", () => {
     expect(store.getXApiUsageSummary(dayTwo).total.cost_usd).toBeCloseTo(0.01);
   });
 
-  it("lastLaunchByAuthor returns the most recent", () => {
-    const base = 1_700_000_000_000;
-    for (let i = 0; i < 3; i++) {
-      seedLaunch(store, {
-        mint: `M${i}`,
-        ticker: `T${i}`,
-        name: `n${i}`,
-        source_tweet_id: `t${i}`,
-        source_author: "elonmusk",
-        sol_spent: 0.01,
-        tx_signature: `sig${i}`,
-        metadata_uri: "ipfs://x",
-        image_cid: "img",
-        launched_at: base + i * 1000,
-        classification_reason: null,
-      });
-    }
-    const last = store.lastLaunchByAuthor("elonmusk");
-    expect(last?.mint).toBe("M2");
-    expect(store.lastLaunchByAuthor("nobody")).toBeNull();
-  });
-
   it("reserveLaunchSlot returns null when daily count cap is hit", () => {
     const t = 1_700_000_000_000;
     for (let i = 0; i < 3; i++) {

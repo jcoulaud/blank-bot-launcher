@@ -53,7 +53,6 @@ const env: Env = {
   LLM_MODEL: "gemini-2.5-flash",
   IMAGE_MODEL: "gemini-2.5-flash-image",
   CLASSIFIER_THRESHOLD: 0.85,
-  PER_AUTHOR_COOLDOWN_HOURS: 6,
   MAX_SOL_PER_LAUNCH: 0.05,
   MAX_LAUNCHES_PER_DAY: 3,
   MAX_SOL_PER_DAY: 0.15,

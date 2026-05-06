@@ -24,7 +24,7 @@ You should receive an acknowledgement within 5 business days.
 | Dashboard HTML escaping | `src/dashboard/render.ts` | `test/security.test.ts` |
 | Dashboard security headers | `src/dashboard/server.ts` | manual |
 | Dashboard loopback bind only | `src/dashboard/server.ts` | manual |
-| Daily caps, per-author cooldown, balance check | `src/safety/safety.ts` | `test/safety.test.ts` |
+| Daily caps and balance check | `src/safety/safety.ts` | `test/safety.test.ts` |
 | Atomic daily-cap reservation | `src/store/db.ts` | `test/db.test.ts`, `test/pipeline.test.ts` |
 
 ## Known sharp edges

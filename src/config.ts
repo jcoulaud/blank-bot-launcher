@@ -22,7 +22,6 @@ const envSchema = z.object({
   LLM_MODEL: z.string().default("gemini-2.5-flash"),
   IMAGE_MODEL: z.string().default("gemini-2.5-flash-image"),
   CLASSIFIER_THRESHOLD: z.coerce.number().min(0).max(1).default(0.85),
-  PER_AUTHOR_COOLDOWN_HOURS: z.coerce.number().min(0).default(6),
   // Cap minimum is 1000 lamports (1e-6 SOL). Anything smaller is almost
   // certainly a typo (extra zero in the env file) and would make the
   // FLOAT_EPS_SOL epsilon dominate the cap, defeating the safety check.

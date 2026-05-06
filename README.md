@@ -25,7 +25,7 @@ flowchart TD
   C --> D["Classify tweet"]
   D --> E["Generate token metadata"]
   E --> F["Prepare image"]
-  F --> G["Check caps, cooldown, balance"]
+  F --> G["Check caps and balance"]
   G --> H["Reserve daily-cap slot"]
   H --> I["Upload image and metadata to IPFS"]
   I --> J["blank.launch.create()"]
@@ -146,7 +146,7 @@ The script only touches today's UTC counter.
 ```text
 src/
   brain/       tweet classifier, metadata generator, image preparation
-  safety/      caps, cooldown, balance, and RPC reachability checks
+  safety/      caps, balance, and RPC reachability checks
   launcher/    Blank SDK and Pinata integration
   sources/     X stream, historical timeline, and mock sources
   store/       SQLite persistence

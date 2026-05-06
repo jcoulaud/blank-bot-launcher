@@ -5,7 +5,6 @@ import { type Connection, Keypair } from "@solana/web3.js";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Env } from "../src/config.js";
 import { checkSafety, evaluateCaps } from "../src/safety/safety.js";
-import type { Tweet } from "../src/sources/tweet-source.js";
 import { Store } from "../src/store/db.js";
 import { seedLaunch } from "./helpers/db-helpers.js";
 
@@ -19,7 +18,6 @@ const env: Env = {
   LLM_MODEL: "gemini-2.5-flash",
   IMAGE_MODEL: "gemini-2.5-flash-image",
   CLASSIFIER_THRESHOLD: 0.85,
-  PER_AUTHOR_COOLDOWN_HOURS: 6,
   MAX_SOL_PER_LAUNCH: 0.05,
   MAX_LAUNCHES_PER_DAY: 3,
   MAX_SOL_PER_DAY: 0.15,
@@ -32,20 +30,6 @@ const env: Env = {
   SKIP_OLDER_THAN_S: 300,
   STAKING_SHARE_BPS: 8000,
 };
-
-function fakeTweet(authorHandle = "elonmusk"): Tweet {
-  return {
-    id: "t1",
-    authorHandle,
-    authorId: "1",
-    text: "hi",
-    createdAt: new Date(),
-    images: [],
-    isReply: false,
-    isRetweet: false,
-    isQuoteTweet: false,
-  };
-}
 
 function fakeConnection(balanceSol: number): Connection {
   return {
@@ -69,7 +53,7 @@ describe("checkSafety", () => {
   });
 
   it("accepts a clean tweet with sufficient balance", async () => {
-    const decision = await checkSafety(fakeTweet(), {
+    const decision = await checkSafety({
       env,
       store,
       connection: fakeConnection(1.0),
@@ -97,7 +81,7 @@ describe("checkSafety", () => {
         classification_reason: null,
       });
     }
-    const decision = await checkSafety(fakeTweet(), {
+    const decision = await checkSafety({
       env,
       store,
       connection: fakeConnection(1.0),
@@ -124,7 +108,7 @@ describe("checkSafety", () => {
       launched_at: t,
       classification_reason: null,
     });
-    const decision = await checkSafety(fakeTweet(), {
+    const decision = await checkSafety({
       env,
       store,
       connection: fakeConnection(1.0),
@@ -137,7 +121,7 @@ describe("checkSafety", () => {
   });
 
   it("rejects when planned spend exceeds per-launch cap", async () => {
-    const decision = await checkSafety(fakeTweet(), {
+    const decision = await checkSafety({
       env,
       store,
       connection: fakeConnection(1.0),
@@ -149,61 +133,8 @@ describe("checkSafety", () => {
     if (!decision.ok) expect(decision.reason).toBe("per_launch_cap");
   });
 
-  it("rejects when same author launched recently (cooldown)", async () => {
-    const now = Date.now();
-    seedLaunch(store, {
-      mint: "M",
-      ticker: "T",
-      name: "n",
-      source_tweet_id: "x",
-      source_author: "elonmusk",
-      sol_spent: 0,
-      tx_signature: "s",
-      metadata_uri: "u",
-      image_cid: "c",
-      launched_at: now - 60 * 60 * 1000, // 1 hour ago, cooldown is 6h
-      classification_reason: null,
-    });
-    const decision = await checkSafety(fakeTweet("elonmusk"), {
-      env,
-      store,
-      connection: fakeConnection(1.0),
-      wallet,
-      plannedSpendSol: 0.05,
-      now,
-    });
-    expect(decision.ok).toBe(false);
-    if (!decision.ok) expect(decision.reason).toBe("author_cooldown");
-  });
-
-  it("accepts after cooldown period elapses", async () => {
-    const now = Date.now();
-    seedLaunch(store, {
-      mint: "M",
-      ticker: "T",
-      name: "n",
-      source_tweet_id: "x",
-      source_author: "elonmusk",
-      sol_spent: 0,
-      tx_signature: "s",
-      metadata_uri: "u",
-      image_cid: "c",
-      launched_at: now - 7 * 60 * 60 * 1000, // 7h ago > 6h cooldown
-      classification_reason: null,
-    });
-    const decision = await checkSafety(fakeTweet("elonmusk"), {
-      env,
-      store,
-      connection: fakeConnection(1.0),
-      wallet,
-      plannedSpendSol: 0.05,
-      now,
-    });
-    expect(decision.ok).toBe(true);
-  });
-
   it("rejects when wallet balance is insufficient", async () => {
-    const decision = await checkSafety(fakeTweet(), {
+    const decision = await checkSafety({
       env,
       store,
       connection: fakeConnection(0.001),
@@ -231,7 +162,7 @@ describe("evaluateCaps (pure, no RPC)", () => {
   });
 
   it("returns ok=true (caps cleared) on a fresh DB; balance not yet checked", () => {
-    const decision = evaluateCaps(fakeTweet(), {
+    const decision = evaluateCaps({
       env,
       store,
       plannedSpendSol: 0.05,
@@ -258,7 +189,7 @@ describe("evaluateCaps (pure, no RPC)", () => {
         classification_reason: null,
       });
     }
-    const decision = evaluateCaps(fakeTweet(), { env, store, plannedSpendSol: 0.01, now: t });
+    const decision = evaluateCaps({ env, store, plannedSpendSol: 0.01, now: t });
     expect(decision.ok).toBe(false);
     if (!decision.ok) {
       expect(decision.reason).toBe("daily_count_cap");
@@ -281,13 +212,13 @@ describe("evaluateCaps (pure, no RPC)", () => {
       launched_at: t,
       classification_reason: null,
     });
-    const decision = evaluateCaps(fakeTweet(), { env, store, plannedSpendSol: 0.05, now: t });
+    const decision = evaluateCaps({ env, store, plannedSpendSol: 0.05, now: t });
     expect(decision.ok).toBe(false);
     if (!decision.ok) expect(decision.reason).toBe("daily_sol_cap");
   });
 
   it("rejects with per_launch_cap when planned spend exceeds MAX_SOL_PER_LAUNCH", () => {
-    const decision = evaluateCaps(fakeTweet(), {
+    const decision = evaluateCaps({
       env,
       store,
       plannedSpendSol: env.MAX_SOL_PER_LAUNCH + 0.01,
@@ -297,61 +228,9 @@ describe("evaluateCaps (pure, no RPC)", () => {
     if (!decision.ok) expect(decision.reason).toBe("per_launch_cap");
   });
 
-  it("rejects with author_cooldown when same author launched within the cooldown window", () => {
+  it("checks cap order: count > sol > per-launch", () => {
     const now = Date.now();
-    seedLaunch(store, {
-      mint: "M",
-      ticker: "T",
-      name: "n",
-      source_tweet_id: "x",
-      source_author: "elonmusk",
-      sol_spent: 0,
-      tx_signature: "s",
-      metadata_uri: "u",
-      image_cid: "c",
-      launched_at: now - 60 * 60 * 1000,
-      classification_reason: null,
-    });
-    const decision = evaluateCaps(fakeTweet("elonmusk"), {
-      env,
-      store,
-      plannedSpendSol: 0.01,
-      now,
-    });
-    expect(decision.ok).toBe(false);
-    if (!decision.ok) {
-      expect(decision.reason).toBe("author_cooldown");
-      expect(decision.detail).toContain("elonmusk");
-    }
-  });
-
-  it("ignores launches from a different author when checking cooldown", () => {
-    const now = Date.now();
-    seedLaunch(store, {
-      mint: "M",
-      ticker: "T",
-      name: "n",
-      source_tweet_id: "x",
-      source_author: "someoneElse",
-      sol_spent: 0,
-      tx_signature: "s",
-      metadata_uri: "u",
-      image_cid: "c",
-      launched_at: now - 60 * 60 * 1000,
-      classification_reason: null,
-    });
-    const decision = evaluateCaps(fakeTweet("elonmusk"), {
-      env,
-      store,
-      plannedSpendSol: 0.01,
-      now,
-    });
-    expect(decision.ok).toBe(true);
-  });
-
-  it("checks cap order: count > sol > per-launch > cooldown", () => {
-    const now = Date.now();
-    // Hit count cap, also exceed per-launch cap, also have a recent cooldown launch.
+    // Hit count cap and also exceed the per-launch cap.
     for (let i = 0; i < env.MAX_LAUNCHES_PER_DAY; i++) {
       seedLaunch(store, {
         mint: `M${i}`,
@@ -367,7 +246,7 @@ describe("evaluateCaps (pure, no RPC)", () => {
         classification_reason: null,
       });
     }
-    const decision = evaluateCaps(fakeTweet("elonmusk"), {
+    const decision = evaluateCaps({
       env,
       store,
       plannedSpendSol: env.MAX_SOL_PER_LAUNCH + 1, // also exceeds per-launch cap
