@@ -171,6 +171,61 @@ describe("Store", () => {
     expect(store.getXApiUsageSummary(dayTwo).total.cost_usd).toBeCloseTo(0.01);
   });
 
+  it("persists launch totals, daily counters, and X API usage across Store reopen", () => {
+    const dbPath = join(tmp, "test.db");
+    const dayOne = Date.UTC(2026, 4, 1, 12, 0, 0);
+    const dayTwo = Date.UTC(2026, 4, 2, 12, 0, 0);
+
+    seedLaunch(store, {
+      mint: "M1",
+      ticker: "ONE",
+      name: "One",
+      source_tweet_id: "t1",
+      source_author: "x",
+      sol_spent: 0.01,
+      tx_signature: "s1",
+      metadata_uri: "ipfs://one",
+      image_cid: "img1",
+      launched_at: dayOne,
+      classification_reason: null,
+    });
+    seedLaunch(store, {
+      mint: "M2",
+      ticker: "TWO",
+      name: "Two",
+      source_tweet_id: "t2",
+      source_author: "x",
+      sol_spent: 0.02,
+      tx_signature: "s2",
+      metadata_uri: "ipfs://two",
+      image_cid: "img2",
+      launched_at: dayTwo,
+      classification_reason: null,
+    });
+    store.recordXApiUsage({
+      timestampMs: dayOne,
+      source: "test",
+      resources: [{ resource_type: "post_read", resource_id: "tweet-1", cost_usd: 0.005 }],
+    });
+    store.recordXApiUsage({
+      timestampMs: dayTwo,
+      source: "test",
+      resources: [{ resource_type: "user_read", resource_id: "user-1", cost_usd: 0.01 }],
+    });
+
+    expect(store.getLaunchTotals()).toEqual({ launches_count: 2, sol_spent: 0.03 });
+    store.close();
+    store = new Store(dbPath);
+
+    expect(store.getDailyCounter(dayOne).launches_count).toBe(1);
+    expect(store.getDailyCounter(dayOne).sol_spent).toBeCloseTo(0.01);
+    expect(store.getDailyCounter(dayTwo).launches_count).toBe(1);
+    expect(store.getDailyCounter(dayTwo).sol_spent).toBeCloseTo(0.02);
+    expect(store.getLaunchTotals().launches_count).toBe(2);
+    expect(store.getLaunchTotals().sol_spent).toBeCloseTo(0.03);
+    expect(store.getXApiUsageSummary(dayTwo).total.cost_usd).toBeCloseTo(0.015);
+  });
+
   it("reserveLaunchSlot returns null when daily count cap is hit", () => {
     const t = 1_700_000_000_000;
     for (let i = 0; i < 3; i++) {

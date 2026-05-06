@@ -116,6 +116,10 @@ export type SeenTweet = z.output<typeof SeenTweetSchema>;
 export type SeenTweetInput = z.input<typeof SeenTweetSchema>;
 export type LaunchRecord = z.infer<typeof LaunchRecordSchema>;
 export type DailyCounter = z.infer<typeof DailyCounterSchema>;
+export type LaunchTotals = {
+  launches_count: number;
+  sol_spent: number;
+};
 export type XApiUsageSummaryLine = {
   resource_type: XApiUsageResourceType;
   resources: number;
@@ -348,6 +352,15 @@ export class Store {
       .get(date);
     const totals = z.object({ launches_count: z.number(), sol_spent: z.number() }).parse(row);
     return { date, launches_count: totals.launches_count, sol_spent: totals.sol_spent };
+  }
+
+  getLaunchTotals(): LaunchTotals {
+    const row = this.db
+      .prepare(
+        "SELECT COUNT(*) AS launches_count, COALESCE(SUM(sol_spent), 0) AS sol_spent FROM launches",
+      )
+      .get();
+    return z.object({ launches_count: z.number(), sol_spent: z.number() }).parse(row);
   }
 
   recordXApiUsage(args: {

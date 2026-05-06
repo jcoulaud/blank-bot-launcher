@@ -2,7 +2,14 @@ import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { ExternalLink } from "lucide-static";
-import type { Decision, LaunchRecord, SeenTweet, XApiUsageSummary } from "../store/db.js";
+import type {
+  DailyCounter,
+  Decision,
+  LaunchRecord,
+  LaunchTotals,
+  SeenTweet,
+  XApiUsageSummary,
+} from "../store/db.js";
 import {
   X_API_PRICING_DOC_URL,
   X_API_USAGE_RESOURCE_TYPES,
@@ -70,7 +77,8 @@ export function layout(title: string, body: string, navMeta?: string): string {
 }
 
 export function renderHome(args: {
-  counter: { date: string; launches_count: number; sol_spent: number };
+  todayCounter: DailyCounter;
+  launchTotals: LaunchTotals;
   xApiUsage: XApiUsageSummary;
   openReservations?: number;
   reservedSolPending?: number;
@@ -130,25 +138,25 @@ export function renderHome(args: {
             <p class="stat-detail">SOL${args.balanceStale ? " (stale - RPC down)" : ""}</p>
           </div>
           <div class="stat">
-            <p class="stat-label">Launches today</p>
-            <p class="stat-value">${args.counter.launches_count}</p>
-            <p class="stat-detail">on ${esc(args.counter.date)}${
+            <p class="stat-label">Launches total</p>
+            <p class="stat-value">${args.launchTotals.launches_count}</p>
+            <p class="stat-detail">today ${args.todayCounter.launches_count} on ${esc(args.todayCounter.date)}${
               args.openReservations ? ` (+${args.openReservations} reserved)` : ""
             }</p>
           </div>
           <div class="stat">
-            <p class="stat-label">SOL spent today</p>
-            <p class="stat-value">${formatSolThreeDecimals(args.counter.sol_spent)}</p>
-            <p class="stat-detail">SOL${
+            <p class="stat-label">SOL spent total</p>
+            <p class="stat-value">${formatSolThreeDecimals(args.launchTotals.sol_spent)}</p>
+            <p class="stat-detail">today ${formatSolThreeDecimals(args.todayCounter.sol_spent)} SOL${
               args.reservedSolPending && args.reservedSolPending > 0
                 ? ` (+${formatSolThreeDecimals(args.reservedSolPending)} reserved)`
                 : ""
             }</p>
           </div>
           <div class="stat">
-            <p class="stat-label">X API today</p>
-            <p class="stat-value">${formatUsd(args.xApiUsage.today.cost_usd)}</p>
-            <p class="stat-detail">${args.xApiUsage.today.resources} billable reads</p>
+            <p class="stat-label">X API total</p>
+            <p class="stat-value">${formatUsd(args.xApiUsage.total.cost_usd)}</p>
+            <p class="stat-detail">${args.xApiUsage.total.resources} reads; today ${formatUsd(args.xApiUsage.today.cost_usd)}</p>
           </div>
         </div>
       </div>
@@ -221,7 +229,7 @@ export function renderHome(args: {
     </div>
   `;
 
-  return layout("status", body, `${args.counter.launches_count} launches today`);
+  return layout("status", body, `${args.launchTotals.launches_count} launches total`);
 }
 
 export function renderLaunch(l: LaunchRecord): string {

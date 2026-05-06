@@ -100,7 +100,8 @@ export function startDashboard(options: DashboardOptions): { close: () => Promis
 
   app.get("/", async (req: Request, res: Response) => {
     const now = Date.now();
-    const counter = options.store.getCommittedDailyCounter(now);
+    const todayCounter = options.store.getCommittedDailyCounter(now);
+    const launchTotals = options.store.getLaunchTotals();
     const xApiUsage = options.store.getXApiUsageSummary(now);
     // The reserved counter includes in-flight launches that haven't yet
     // committed (mid-IPFS, mid-launch). The safety gate checks against this
@@ -108,8 +109,8 @@ export function startDashboard(options: DashboardOptions): { close: () => Promis
     // "1 launch today" should not think they have 2 free slots when one is
     // already reserved against the daily cap.
     const reserved = options.store.getDailyCounter(now);
-    const openReservations = Math.max(0, reserved.launches_count - counter.launches_count);
-    const reservedSolPending = Math.max(0, reserved.sol_spent - counter.sol_spent);
+    const openReservations = Math.max(0, reserved.launches_count - todayCounter.launches_count);
+    const reservedSolPending = Math.max(0, reserved.sol_spent - todayCounter.sol_spent);
 
     const seenTotal = options.store.countSeen();
     const launchesTotal = options.store.countLaunches();
@@ -124,7 +125,8 @@ export function startDashboard(options: DashboardOptions): { close: () => Promis
 
     res.type("html").send(
       renderHome({
-        counter,
+        todayCounter,
+        launchTotals,
         xApiUsage,
         openReservations,
         reservedSolPending,

@@ -5,6 +5,7 @@ import {
   formatSolTwoDecimals,
   formatUsd,
   pillClass,
+  renderHome,
 } from "../src/dashboard/render.js";
 import type { Decision } from "../src/store/db.js";
 
@@ -94,5 +95,39 @@ describe("formatSolThreeDecimals", () => {
     expect(formatSolThreeDecimals(1)).toBe("1.000");
     expect(formatSolThreeDecimals(0.094613495)).toBe("0.095");
     expect(formatSolThreeDecimals(0)).toBe("0.000");
+  });
+});
+
+describe("renderHome", () => {
+  it("uses persisted total metrics as dashboard headlines and keeps today as detail", () => {
+    const html = renderHome({
+      todayCounter: { date: "2026-05-06", launches_count: 1, sol_spent: 0.01 },
+      launchTotals: { launches_count: 4, sol_spent: 0.09 },
+      xApiUsage: {
+        date: "2026-05-06",
+        today: { resources: 2, cost_usd: 0.015, by_type: [] },
+        total: { resources: 8, cost_usd: 0.055, by_type: [] },
+      },
+      seen: [],
+      seenPage: 1,
+      seenPageSize: 20,
+      seenTotal: 0,
+      launches: [],
+      launchesPage: 1,
+      launchesPageSize: 20,
+      launchesTotal: 0,
+      balanceSol: 1.23,
+      walletPubkey: "Wallet111111111111111111111111111111111",
+    });
+
+    expect(html).toContain("Launches total");
+    expect(html).toContain('<p class="stat-value">4</p>');
+    expect(html).toContain("today 1 on 2026-05-06");
+    expect(html).toContain("SOL spent total");
+    expect(html).toContain('<p class="stat-value">0.090</p>');
+    expect(html).toContain("today 0.010 SOL");
+    expect(html).toContain("X API total");
+    expect(html).toContain('<p class="stat-value">$0.055</p>');
+    expect(html).toContain("8 reads; today $0.015");
   });
 });
