@@ -256,6 +256,45 @@ describe("runPipeline integration", () => {
     expect(seen[0]?.reason).toBe("video_media_attached");
   });
 
+  it("skips emoji-only quote reactions before classification", async () => {
+    generateObjectMock.mockReset();
+    blankCreateMock.mockReset();
+    const { runPipeline } = await import("../src/pipeline.js");
+    const result = await runPipeline(
+      {
+        ...fakeTweet(),
+        text: "👇🎶🎤 https://t.co/quoted",
+        isQuoteTweet: true,
+        quotedTweet: {
+          ...fakeTweet(),
+          id: "q1",
+          authorHandle: "roaringpepe",
+          text: "Why should communism always be lower case?\nSo that it's not capitalized.",
+        },
+      },
+      {
+        env,
+        store,
+        connection: fakeConnection(1),
+        wallet,
+        // biome-ignore lint/suspicious/noExplicitAny: model is mocked
+        llmModel: {} as any,
+        // biome-ignore lint/suspicious/noExplicitAny: client built via mocked SDK
+        blankClient: { launch: { create: blankCreateMock } } as any,
+        dryRun: false,
+        force: false,
+      },
+    );
+
+    expect(result.decision).toBe("skipped_validation");
+    expect(result.reason).toBe("quote_reaction_only");
+    expect(generateObjectMock).not.toHaveBeenCalled();
+    expect(blankCreateMock).not.toHaveBeenCalled();
+    const seen = store.recentSeen(10);
+    expect(seen[0]?.decision).toBe("skipped_validation");
+    expect(seen[0]?.reason).toBe("quote_reaction_only");
+  });
+
   it("happy path: classify to metadata to image to IPFS to launch to commit, counter +1", async () => {
     setupHappyMocks();
     const { runPipeline } = await import("../src/pipeline.js");
@@ -364,7 +403,7 @@ describe("runPipeline integration", () => {
     const result = await runPipeline(
       {
         ...fakeTweet(),
-        text: "\u{1F682}\u{1F682}\u{1F682}",
+        text: "look at this",
         isQuoteTweet: true,
         quotedTweet: {
           ...fakeTweet(),

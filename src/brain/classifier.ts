@@ -4,13 +4,7 @@ import { getLogger } from "../logger.js";
 import { getPrimaryLaunchImage, type Tweet } from "../sources/tweet-source.js";
 import { buildClassifierPrompt } from "./prompts.js";
 
-const MemeSourceSchema = z.enum([
-  "tweet_text",
-  "tweet_image",
-  "tweet_and_image",
-  "quoted_tweet",
-  "none",
-]);
+const MemeSourceSchema = z.enum(["tweet_text", "tweet_image", "tweet_and_image", "none"]);
 const VisualAssessmentSchema = z.enum([
   "none",
   "meme_template",

@@ -19,7 +19,7 @@ import {
 } from "./launcher/pinata.js";
 import { getLogger } from "./logger.js";
 import { checkSafety, type SafetyDecision } from "./safety/safety.js";
-import { hasAttachedVideo, type Tweet } from "./sources/tweet-source.js";
+import { hasAttachedVideo, isQuoteReactionOnly, type Tweet } from "./sources/tweet-source.js";
 import type { Decision, Store } from "./store/db.js";
 import { errMsg } from "./util/errors.js";
 import { mimeToExt } from "./util/mime.js";
@@ -105,6 +105,11 @@ export async function runPipeline(tweet: Tweet, deps: PipelineDeps): Promise<Pip
   if (hasAttachedVideo(tweet)) {
     log.info("tweet has attached video media, skipping");
     return skip("skipped_validation", "video_media_attached");
+  }
+
+  if (isQuoteReactionOnly(tweet)) {
+    log.info("quote tweet has reaction-only commentary, skipping");
+    return skip("skipped_validation", "quote_reaction_only");
   }
 
   // Stage 1: classify.

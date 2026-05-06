@@ -82,6 +82,14 @@ describe("buildClassifierPrompt", () => {
     );
     expect(prompt).toContain("emoji reaction to an analytics chart");
   });
+
+  it("requires quote tweets to author the meme in the source text", () => {
+    const prompt = buildClassifierPrompt(sampleTweet);
+    expect(prompt).toContain("The source tweet must author the meme");
+    expect(prompt).toContain("👇🎶🎤");
+    expect(prompt).toContain('Use "none" when the only launchable material is in the quoted tweet');
+    expect(prompt).not.toContain('quoted_tweet"');
+  });
 });
 
 describe("buildMetadataPrompt", () => {

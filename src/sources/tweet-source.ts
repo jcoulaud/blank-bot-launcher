@@ -1,3 +1,5 @@
+import { stripZeroWidthAndBidi } from "../util/text.js";
+
 export type TweetMedia = {
   url: string;
 };
@@ -44,4 +46,21 @@ export function hasAttachedVideo(tweet: Tweet): boolean {
     tweet.media.some((media) => media.type === "video") ||
     Boolean(tweet.quotedTweet && hasAttachedVideo(tweet.quotedTweet))
   );
+}
+
+const URL_RE = /\bhttps?:\/\/\S+/gi;
+const MENTION_RE = /(^|\s)@\w+/g;
+const HAS_LETTER_OR_NUMBER_RE = /[\p{L}\p{N}]/u;
+
+function quoteCommentaryText(text: string): string {
+  return stripZeroWidthAndBidi(text.normalize("NFKC"))
+    .replace(URL_RE, " ")
+    .replace(MENTION_RE, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+export function isQuoteReactionOnly(tweet: Tweet): boolean {
+  if (!tweet.isQuoteTweet) return false;
+  return !HAS_LETTER_OR_NUMBER_RE.test(quoteCommentaryText(tweet.text));
 }

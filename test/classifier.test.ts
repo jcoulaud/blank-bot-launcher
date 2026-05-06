@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { type Classification, passesThreshold } from "../src/brain/classifier.js";
+import {
+  type Classification,
+  ClassificationSchema,
+  passesThreshold,
+} from "../src/brain/classifier.js";
 
 function classification(overrides: Partial<Classification> = {}): Classification {
   return {
@@ -64,5 +68,14 @@ describe("passesThreshold", () => {
       reason: "emoji reaction to announcement",
     });
     expect(passesThreshold(c, 0.85)).toBe(false);
+  });
+
+  it("does not allow the quoted tweet to be the meme source", () => {
+    expect(() =>
+      ClassificationSchema.parse({
+        ...classification(),
+        memeSource: "quoted_tweet",
+      }),
+    ).toThrow();
   });
 });

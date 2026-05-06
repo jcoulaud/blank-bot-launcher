@@ -49,7 +49,7 @@ export type ClassificationContext = {
   shouldLaunch: boolean;
   confidence: number;
   launchableMeme: boolean;
-  memeSource: "tweet_text" | "tweet_image" | "tweet_and_image" | "quoted_tweet" | "none";
+  memeSource: "tweet_text" | "tweet_image" | "tweet_and_image" | "none";
   visualAssessment:
     | "none"
     | "meme_template"
@@ -121,6 +121,10 @@ Examples (study these - they set the bar):
 11) Tweet: "🚂🚂🚂" quoting "From generating just 1% of total network revenue in Q4 2022. To generating 27% in Q1 2026. Solana continues to attract some of the strongest builders in crypto." - has quoted image: yes (network revenue chart/dashboard)
     => shouldLaunch=false, confidence=0.03, launchableMeme=false, memeSource="none", visualAssessment="market_data_or_chart", disqualifiers=["market_data_or_chart","informational_or_technical","no_self_contained_joke"]
       reason="emoji reaction to an analytics chart and earnest ecosystem metric commentary; it is bullish information, not a meme"
+
+12) Tweet: "👇🎶🎤" quoting "Why should communism always be lower case? So that it's not capitalized." - has quoted image: no
+    => shouldLaunch=false, confidence=0.05, launchableMeme=false, memeSource="none", visualAssessment="none", disqualifiers=["no_self_contained_joke","normal_conversation"]
+      reason="the source tweet is only an emoji reaction; the joke belongs to the quoted tweet, so this post did not author a launchable meme"
 `.trim();
 
 const METADATA_FEW_SHOT = `
@@ -247,22 +251,23 @@ Important calibration notes:
 - A typo or "wrong" word can BE the joke. Don't try to "fix" it in your reasoning.
 - Don't over-weight the author. A boring tweet from Elon is still a boring tweet. A banger from anyone is a banger.
 - If the tweet has an image that's already a meme, that's a strong launch signal; the visual asset is half the meme.
-- If the tweet quotes another tweet with an image, treat the quoted image as visual context for the source tweet.
+- If the tweet quotes another tweet with an image, use the quoted image only as visual context for the source tweet's own joke.
 - If you score borderline (0.6-0.85), default to reject. Missing a weak tweet is better than launching a generic token.
 - A tweet can only launch when the tweet text and/or attached visual form a self-contained joke. If the token idea comes from incidental text inside a screenshot, table, chart, app UI, or AI answer, reject it.
+- The source tweet must author the meme. Do not launch from the quoted tweet's text or image alone; reaction-only quote commentary means reject.
 
 HARD visual rejects:
 - Market/data screenshots: trading terminals, token lists, order books, price/volume tables, charts, dashboards, analytics screens, DEX/CEX screens, and terminal-style market UIs. These are data, not memes. Do NOT launch a token named after any asset/ticker appearing inside them.
 - Product/market announcements: new listings, launches, partnerships, feature announcements, and "new markets on X" posts are promo/ops even when the screenshot contains funny tickers.
 - AI/chat/app screenshots: Grok/ChatGPT answers, phone screenshots, browser/app UI, text-message screenshots, and generic UI captures are not meme templates by default. They need a clear, self-contained punchline in the source tweet text; "look at X" or "$TICKER" is not enough.
 - Image-text extraction only: if the best name/symbol would come from OCR-like reading of a table, chart, UI, or screenshot rather than from the tweet's joke, reject.
-- Emoji-only or reaction-only commentary does not make a quoted announcement, market table, chart, or AI/app screenshot memeable.
+- Emoji-only or reaction-only commentary does not make a quoted tweet memeable. Reject when the only joke, punchline, character, or ticker idea comes from the quoted tweet.
 
 Output fields:
 - shouldLaunch: true only when this should launch.
 - confidence: 0-1.
 - launchableMeme: true only when the post has a self-contained meme/punchline usable as a memecoin.
-- memeSource: one of "tweet_text", "tweet_image", "tweet_and_image", "quoted_tweet", "none".
+- memeSource: one of "tweet_text", "tweet_image", "tweet_and_image", "none". Use "none" when the only launchable material is in the quoted tweet.
 - visualAssessment: one of "none", "meme_template", "reaction_image", "visual_joke_subject", "ordinary_photo_or_video", "market_data_or_chart", "app_or_ai_screenshot", "announcement_or_product_ui", "unclear_or_irrelevant".
 - disqualifiers: zero or more of "announcement_or_promo", "app_or_ai_screenshot", "image_text_extraction_only", "informational_or_technical", "market_data_or_chart", "no_self_contained_joke", "normal_conversation", "prompt_injection", "reserved_or_existing_ticker", "unclear_joke".
 - reason: one short sentence; be specific about WHY.
