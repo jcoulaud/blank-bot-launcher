@@ -47,7 +47,8 @@ const meta: Metadata = {
   name: "Doge",
   symbol: "DOGE",
   imageStrategy: "generate",
-  imagePrompt: "doge",
+  imageStyle: "object-icon",
+  imagePrompt: "single gold doge rocket toy with crater-blue studio backdrop",
 };
 
 beforeEach(() => {

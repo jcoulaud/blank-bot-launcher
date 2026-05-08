@@ -13,18 +13,28 @@ import type { ImageStyle, Metadata } from "./metadata.js";
 const MAX_DOWNLOAD_BYTES = 5 * 1024 * 1024;
 const DOWNLOAD_TIMEOUT_MS = 30_000;
 const SAFE_FALLBACK_IMAGE_STYLE =
-  "safe abstract crypto mascot icon, single chunky cartoon character centered on one flat saturated background color, thick black outline, BONK/WIF/POPCAT-style token icon, no public figures, no real people, no copyrighted characters, no violence, no political symbols";
+  "safe abstract token-avatar icon, one distinctive non-human subject or symbolic object, strong silhouette, simple high-contrast background, no public figures, no real people, no copyrighted characters, no violence, no political symbols";
 const FRAMING_RULES =
-  "OUTPUT FORMAT: a memecoin token icon, in the visual family of BONK, WIF, POPCAT, PEPE, DOGE — designed to be recognized at 32x32 pixel favicon size on a token list. Square 1:1. Composition: ONE subject (a single character face/head or single chunky object), centered, occupying 70-90% of the canvas, with a strong recognizable silhouette and thick bold outlines. Background: ONE flat saturated solid color (or a very simple two-tone radial), continuous from pixel (0,0) to (canvas_width, canvas_height) with no edge treatment of any kind. The background color and the subject together fill 100% of the canvas. The image MUST NOT contain ANY of: panels, comic gutters, frame lines, outer borders, mattes, vignettes, letterbox bars, padding, margins, caption strips, banner ribbons, title cards, name plates, speech bubbles, watermarks, signatures, logos, words, letters, numbers, or any kind of writing, lettering, or text whatsoever — anywhere in the image, in any language, including stylized graffiti or background text. If the model is tempted to add a caption, label, panel, or border, it must instead extend the flat background color into that space.";
+  "OUTPUT FORMAT: a square 1:1 memecoin token avatar designed to stay recognizable at 32x32 pixels in token lists and wallet UIs. Composition: ONE main subject only, centered, occupying 70-90% of the canvas, with a strong readable silhouette. The style can be photographic, 3D, graphic, pixel, surreal, painterly, or drawn when requested. Background: simple, high-contrast, edge-to-edge, and subordinate to the subject; no busy scenery or multi-object scenes. The image MUST NOT contain ANY of: panels, comic gutters, frame lines, outer borders, mattes, vignettes, letterbox bars, padding, margins, caption strips, banner ribbons, title cards, name plates, speech bubbles, watermarks, signatures, logos, words, letters, numbers, or any kind of writing, lettering, or text whatsoever, anywhere in the image, in any language, including stylized graffiti or background text.";
 const IMAGE_STYLE_PROMPTS: Record<ImageStyle, string> = {
-  "classic-meme-poster":
-    "bold meme-poster mascot icon: single character or object centered on one flat saturated background color, thick black outline, high contrast, BONK/PEPE-style token icon — NO panels, NO captions, NO text, NO border",
-  "reaction-image":
-    "single reaction-character close-up filling the frame, exaggerated facial expression, thick cartoon outlines, one flat saturated background color edge-to-edge — Wojak/Pepe/Apu/Chad portrait icon style — NO panels, NO speech bubbles, NO text, NO border",
-  "clean-vector-mascot":
-    "clean vector mascot icon, single chunky shape, strong silhouette, thick outline, one flat saturated background color edge-to-edge, app-icon framing — NO badges, NO ribbons, NO text, NO border",
+  "meme-character":
+    "internet meme character avatar: simplified expressive character or mascot, bold readable shapes, cartoon treatment is allowed only when the concept calls for a character",
+  "reaction-face":
+    "emotion-forward face or mask close-up: one expression fills the frame, rendered as sketch, paint, plastic, or graphic art as fits the joke",
+  "graphic-emblem":
+    "bold graphic emblem: screenprint/vector/poster language, sharp silhouette, limited palette, logo-like clarity without text",
+  "object-icon":
+    "single tangible object or symbolic prop: material detail, strong lighting, no face unless the tweet specifically needs one",
+  "studio-photo":
+    "photoreal studio avatar: macro/product-photo lighting, clean backdrop, crisp material texture, realistic shadows",
+  "surreal-icon":
+    "surreal conceptual icon: one impossible object or creature that visualizes the tweet's punchline, clean silhouette, dreamlike but not busy",
+  "pixel-icon":
+    "crisp pixel-art avatar: chunky pixels, readable silhouette, limited palette, modern game-item clarity",
+  "3d-avatar":
+    "3D collectible avatar: toy-like or clay/rendered object, simple lighting, tactile material, strong silhouette",
 };
-const DEFAULT_GENERATED_IMAGE_STYLE: ImageStyle = "classic-meme-poster";
+const DEFAULT_GENERATED_IMAGE_STYLE: ImageStyle = "graphic-emblem";
 
 export type ImageOptions = {
   apiKey: string;
@@ -75,7 +85,7 @@ export async function prepareImage(
       const remixed = await callGeminiImage({
         apiKey: options.apiKey,
         model: options.model,
-        prompt: `Edit this image according to: ${meta.remixInstructions ?? ""}. Keep the source subject recognizable and apply only the requested joke-driven visual changes. Do not replace the subject with a generic character. Re-render as a memecoin token icon: single subject centered, one flat saturated background color edge-to-edge, thick outlines, no panels, no captions, no text of any kind. ${FRAMING_RULES}`,
+        prompt: `Edit this image according to: ${meta.remixInstructions ?? ""}. Keep the source subject recognizable and apply only the requested tweet-specific visual changes. Do not replace the subject with a generic character. Re-render as a custom memecoin token avatar; do not force a cartoon style unless the edit instructions call for one. ${FRAMING_RULES}`,
         imageInline: { data: original.buffer.toString("base64"), mimeType: original.mimeType },
       });
       log.info({ source: "remix", image_source: primaryImageSource }, "remixed tweet image");
@@ -120,10 +130,7 @@ async function generateFromPrompt(
   options: ImageOptions,
   log: ReturnType<typeof getLogger>,
 ): Promise<PreparedImage> {
-  const prompt =
-    meta.imagePrompt ?? `cartoon meme illustration of "${meta.name}", bold colors, simple shapes`;
-  const style = meta.imageStyle ?? DEFAULT_GENERATED_IMAGE_STYLE;
-  const generationPrompt = `${prompt}. Visual style: ${IMAGE_STYLE_PROMPTS[style]}. ${FRAMING_RULES}`;
+  const generationPrompt = buildGeneratedImagePrompt(meta);
   let result: { buffer: Buffer; mimeType: string };
   try {
     result = await callGeminiImage({
@@ -143,6 +150,14 @@ async function generateFromPrompt(
   }
   log.info({ bytes: result.buffer.length, source: "generated" }, "generated image");
   return { buffer: result.buffer, mimeType: result.mimeType, source: "generated" };
+}
+
+function buildGeneratedImagePrompt(meta: Metadata): string {
+  const prompt =
+    meta.imagePrompt ??
+    `Invent one distinctive visual metaphor for "${meta.name}" (${meta.symbol}) as a token avatar`;
+  const style = meta.imageStyle ?? DEFAULT_GENERATED_IMAGE_STYLE;
+  return `Create a custom token avatar for this launch. Token: "${meta.name}" ($${meta.symbol}). Visual concept: ${prompt}. Rendering style: ${IMAGE_STYLE_PROMPTS[style]}. Use details from the tweet rather than a reusable mascot template. Avoid generic crypto imagery and default cartoon faces unless the concept explicitly calls for them. ${FRAMING_RULES}`;
 }
 
 function buildSafeFallbackPrompt(meta: Metadata): string {

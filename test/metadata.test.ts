@@ -36,8 +36,8 @@ const baseMeta: Metadata = {
   name: "Elon Doge",
   symbol: "EDOGE",
   imageStrategy: "generate",
-  imageStyle: "classic-meme-poster",
-  imagePrompt: "doge in space",
+  imageStyle: "object-icon",
+  imagePrompt: "single gold doge rocket toy with crater-blue studio backdrop",
 };
 const fourByteChar = String.fromCodePoint(0x1f680);
 const baseClassification: ClassificationContext = {
@@ -102,6 +102,16 @@ describe("validateMetadata", () => {
     delete (meta as { imagePrompt?: string }).imagePrompt;
     const failure = validateMetadata(meta, baseTweet());
     expect(failure?.field).toBe("imageStrategy_consistency");
+  });
+
+  it("rejects generic generated image prompts", () => {
+    const meta: Metadata = {
+      ...baseMeta,
+      imagePrompt: 'cartoon meme illustration of "Doge", bold colors, simple shapes',
+    };
+    const failure = validateMetadata(meta, baseTweet());
+    expect(failure?.field).toBe("imagePrompt");
+    expect(failure?.reason).toMatch(/too generic/);
   });
 
   it("rejects generate without imageStyle", () => {
@@ -201,8 +211,8 @@ describe("generateTokenMetadata retry loop", () => {
         name: "Doge",
         symbol: "DOGE",
         imageStrategy: "generate",
-        imageStyle: "classic-meme-poster",
-        imagePrompt: "doge",
+        imageStyle: "object-icon",
+        imagePrompt: "single gold doge rocket toy with crater-blue studio backdrop",
       },
     });
     const result = await generateTokenMetadata(baseTweet(), metadataOptions());
@@ -221,8 +231,8 @@ describe("generateTokenMetadata retry loop", () => {
         name: "Sol",
         symbol: "SOL",
         imageStrategy: "generate",
-        imageStyle: "classic-meme-poster",
-        imagePrompt: "sun",
+        imageStyle: "graphic-emblem",
+        imagePrompt: "molten gold sun medallion with sunglasses and teal summer backdrop",
       },
     });
     // Second attempt fixes it
@@ -231,8 +241,8 @@ describe("generateTokenMetadata retry loop", () => {
         name: "Sol",
         symbol: "SOLAR",
         imageStrategy: "generate",
-        imageStyle: "classic-meme-poster",
-        imagePrompt: "sun",
+        imageStyle: "graphic-emblem",
+        imagePrompt: "molten gold sun medallion with sunglasses and teal summer backdrop",
       },
     });
     const result = await generateTokenMetadata(baseTweet(), metadataOptions());
@@ -249,7 +259,7 @@ describe("generateTokenMetadata retry loop", () => {
         name: "x",
         symbol: "USDC",
         imageStrategy: "generate",
-        imageStyle: "classic-meme-poster",
+        imageStyle: "graphic-emblem",
         imagePrompt: "x",
       },
     });
@@ -268,8 +278,8 @@ describe("generateTokenMetadata retry loop", () => {
         name: "Doge",
         symbol: "doge",
         imageStrategy: "generate",
-        imageStyle: "classic-meme-poster",
-        imagePrompt: "doge",
+        imageStyle: "object-icon",
+        imagePrompt: "single gold doge rocket toy with crater-blue studio backdrop",
       },
     });
     const result = await generateTokenMetadata(baseTweet(), metadataOptions());

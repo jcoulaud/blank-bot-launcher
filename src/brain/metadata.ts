@@ -5,11 +5,22 @@ import { getPrimaryLaunchImage, type Tweet } from "../sources/tweet-source.js";
 import { ZERO_WIDTH_AND_BIDI_RE } from "../util/text.js";
 import { buildMetadataPrompt, type ClassificationContext, isReservedSymbol } from "./prompts.js";
 
+export const IMAGE_STYLES = [
+  "meme-character",
+  "reaction-face",
+  "graphic-emblem",
+  "object-icon",
+  "studio-photo",
+  "surreal-icon",
+  "pixel-icon",
+  "3d-avatar",
+] as const;
+
 export const MetadataSchema = z.object({
   name: z.string().min(1).max(64),
   symbol: z.string().min(1).max(20),
   imageStrategy: z.enum(["reuse", "remix", "generate"]),
-  imageStyle: z.enum(["classic-meme-poster", "reaction-image", "clean-vector-mascot"]).optional(),
+  imageStyle: z.enum(IMAGE_STYLES).optional(),
   imagePrompt: z.string().optional(),
   remixInstructions: z.string().optional(),
 });
@@ -76,6 +87,11 @@ const SYMBOL_FILLERS = new Set([
   ...NAME_LOW_SIGNAL_FILLERS,
   ...NAME_CONNECTIVE_FILLERS,
 ]);
+const BLOCKED_GENERIC_IMAGE_PROMPT_PATTERNS = [
+  /\bcartoon meme illustration\b/i,
+  /\bbold colors?\b.*\bsimple shapes?\b/i,
+  /^\s*(doge|pepe|wojak|chad|meme|token|coin|logo|icon)\s*$/i,
+] as const;
 
 export type ValidationFailure = {
   field: keyof Metadata | "imageStrategy_consistency";
@@ -88,6 +104,29 @@ function utf8Bytes(s: string): number {
 
 function compactMetadataText(s: string): string {
   return s.normalize("NFKC").replace(ZERO_WIDTH_AND_BIDI_RE, "").replace(/\s+/g, " ").trim();
+}
+
+function normalizeImagePromptForSpecificity(s: string): string {
+  return compactMetadataText(s)
+    .toLowerCase()
+    .replace(/[^\p{L}\p{N}\s]+/gu, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function isGenericGeneratedImagePrompt(prompt: string, name: string): boolean {
+  if (BLOCKED_GENERIC_IMAGE_PROMPT_PATTERNS.some((pattern) => pattern.test(prompt))) return true;
+
+  const normalizedPrompt = normalizeImagePromptForSpecificity(prompt);
+  if (!normalizedPrompt) return true;
+
+  const normalizedName = normalizeImagePromptForSpecificity(name);
+  if (normalizedPrompt === normalizedName) return true;
+
+  const meaningfulWords = normalizedPrompt
+    .split(" ")
+    .filter((word) => word.length > 2 && !SYMBOL_FILLERS.has(word));
+  return meaningfulWords.length < 3;
 }
 
 function normalizeWordForMatching(word: string): string {
@@ -232,11 +271,20 @@ export function validateMetadata(meta: Metadata, tweet: Tweet): ValidationFailur
     return { field: "symbol", reason: `symbol "${symbol}" is reserved (SOL/USDC/BLNK)` };
   }
 
-  if (meta.imageStrategy === "generate" && !meta.imagePrompt) {
-    return {
-      field: "imageStrategy_consistency",
-      reason: `imageStrategy="generate" but imagePrompt is missing`,
-    };
+  if (meta.imageStrategy === "generate") {
+    if (!meta.imagePrompt) {
+      return {
+        field: "imageStrategy_consistency",
+        reason: `imageStrategy="generate" but imagePrompt is missing`,
+      };
+    }
+    if (isGenericGeneratedImagePrompt(meta.imagePrompt, meta.name)) {
+      return {
+        field: "imagePrompt",
+        reason:
+          "imagePrompt is too generic; provide a tweet-specific subject, visual gag, rendering treatment, and simple background",
+      };
+    }
   }
   if (meta.imageStrategy === "generate" && !meta.imageStyle) {
     return {

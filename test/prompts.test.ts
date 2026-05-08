@@ -155,8 +155,9 @@ describe("buildMetadataPrompt", () => {
     expect(prompt).toContain("Quoted tweet author: pumpfun");
     expect(prompt).toContain("communities in control?");
     expect(prompt).toContain("Quoted tweet has image: no");
-    expect(prompt).toContain("classic-meme-poster");
-    expect(prompt).toContain("clean-vector-mascot");
+    expect(prompt).toContain("graphic-emblem");
+    expect(prompt).toContain("studio-photo");
+    expect(prompt).toContain("It does NOT need to look like BONK/PEPE/Wojak");
   });
 
   it("marks quoted-tweet media as available for metadata image strategy", () => {

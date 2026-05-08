@@ -199,8 +199,8 @@ describe("prepareImage dispatch", () => {
       name: "doge",
       symbol: "DOGE",
       imageStrategy: "generate",
-      imageStyle: "clean-vector-mascot",
-      imagePrompt: "doge in space",
+      imageStyle: "object-icon",
+      imagePrompt: "single gold doge rocket toy with crater-blue studio backdrop",
     };
     const result = await prepareImage(tweetNoImage, meta, { apiKey: "k", model: "m" });
     expect(result.source).toBe("generated");
@@ -209,9 +209,9 @@ describe("prepareImage dispatch", () => {
     const parts = body.contents?.[0]?.parts ?? [];
     expect(parts.some((p: { inlineData?: unknown }) => p.inlineData)).toBe(false);
     const text = parts.find((p: { text?: string }) => p.text)?.text ?? "";
-    expect(text).toContain("doge in space");
-    expect(text).toContain("clean vector mascot");
-    expect(text).toContain("memecoin token icon");
+    expect(text).toContain("single gold doge rocket toy");
+    expect(text).toContain("single tangible object");
+    expect(text).toContain("memecoin token avatar");
     expect(text).toContain("any kind of writing");
   });
 
@@ -249,7 +249,7 @@ describe("prepareImage dispatch", () => {
       ((fetchMock.mock.calls[1]?.[1] as RequestInit).body as string) ?? "{}",
     );
     const retryText = retryBody.contents?.[0]?.parts?.[0]?.text ?? "";
-    expect(retryText).toContain("safe abstract crypto mascot icon");
+    expect(retryText).toContain("safe abstract token-avatar icon");
     expect(retryText).toContain("no public figures");
     expect(retryText).toContain("VITALIK");
   });

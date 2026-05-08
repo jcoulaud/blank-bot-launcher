@@ -141,8 +141,8 @@ Worked examples (these reflect the right output shape):
    => name="Gad's honest truth"      # verbatim; the typo "Gad's" (vs "God's") IS the joke, keep it
       symbol="GAD"                   # the load-bearing word
       imageStrategy="generate"       # no image to reuse
-      imageStyle="classic-meme-poster"
-     imagePrompt="Smug academic truth-teller archetype with raised eyebrow, visual pun on 'God's honest truth' becoming 'Gad's honest truth', bold high-contrast composition"
+      imageStyle="graphic-emblem"
+     imagePrompt="Polished brass academic bust with tiny saint halo and one raised eyebrow, courtroom-truth vibe, teal screenprint background, bold emblem silhouette, no text"
 
 3) Tweet: "communities in control?" - author: pumpfun - has image: yes (meme template)
    => name="communities in control?" # verbatim, KEEP the question mark
@@ -162,8 +162,8 @@ Worked examples (these reflect the right output shape):
       imageStrategy="remix"            # the text joke transforms the visible person; don't generate a random old face
      remixInstructions="Use the visible person in the source/quoted image as the base subject.
                         Keep the same recognizable portrait, crop to one head-and-shoulders token icon,
-                        make the hair and beard fully grey, preserve the expression, use one flat
-                        saturated background edge-to-edge. NO text, NO border, NO extra characters."
+                        make the hair and beard fully grey, preserve the expression, use one clean
+                        high-contrast background edge-to-edge. NO text, NO border, NO extra characters."
    # Principle: when the tweet's joke applies a visual change to the attached/quoted image,
    # remix that image. Do not replace it with a generic archetype.
 
@@ -171,12 +171,9 @@ Worked examples (these reflect the right output shape):
    => name="Trillions"                # one-word verbatim, the whole point IS the one-word hype
       symbol="TRILLIONS"               # only one word and it IS the ticker
       imageStrategy="generate"         # video thumbnail isn't a meme template; do not reuse
-      imageStyle="reaction-image"      # the meme is awe at a number, not the number itself
-     imagePrompt="Single Wojak head-and-shoulders close-up filling the frame: mouth wide open, eyes
-                  bulging, sweat beads, hands clutching the face. Pure FOMO-disbelief reaction.
-                  Thick black outline, ONE flat saturated background color edge-to-edge.
-                  Token-icon framing, BONK/WIF/POPCAT family. Do NOT show coins, dollar signs,
-                  charts, numbers, or circuit boards. NO text, NO border, NO panel."
+      imageStyle="reaction-face"       # the meme is awe at a number, not the number itself
+     imagePrompt="Polished chrome shock-mask close-up, eyes blown wide, tiny sweat beads, mouth
+                  agape in FOMO disbelief, electric cyan studio backdrop, one readable face, no text"
    # WRONG approach for this tweet: "river of gold coins flowing through a neon circuit board" -
    # that illustrates what the tweet REACTS to, not the reaction. Generic crypto stock art.
 
@@ -184,24 +181,19 @@ Worked examples (these reflect the right output shape):
    => name="stay for the best model"
       symbol="MODEL"
       imageStrategy="generate"
-      imageStyle="reaction-image"
-     imagePrompt="Single Chad/Gigachad face-on portrait icon, smug confident grin, square jaw,
-                  thick black outlines, ONE flat saturated background color edge-to-edge,
-                  BONK/WIF-style token icon. NO comic panels, NO captions, NO speech bubbles,
-                  NO 'best model' text, NO border or frame. The character IS the meme."
+      imageStyle="object-icon"
+     imagePrompt="Matte black neural-network trophy shaped like a chess king, glowing model-core
+                  facets, calm premium studio lighting, simple ivory backdrop, no text"
    # WRONG approach: "split-panel comic with THE PAIN vs THE QUALITY captions" - bakes in
-   # panel borders and on-image text; produces an editorial cartoon, not a token icon.
+   # panel borders and on-image text; produces an editorial cartoon, not a token avatar.
 
 8) Tweet: "Real superhero shit." - author: toly - has image: no
    => name="Real superhero shit."
       symbol="SUPERHERO"
-      imageStrategy="reaction-image"   # one character, big face, flat bg
-      imageStyle="reaction-image"
-     imagePrompt="Single cartoon superhero head-and-shoulders close-up, bold mask, smug grin,
-                  thick black outlines, ONE flat saturated background color edge-to-edge.
-                  Token-icon framing, character fills 80% of canvas. NO cape flowing through
-                  the scene, NO city background, NO money bags, NO 'CAPITAL CAPTAIN' title
-                  banner, NO text of any kind, NO border."
+      imageStrategy="generate"
+      imageStyle="3d-avatar"
+     imagePrompt="Single scuffed superhero mask as a tactile 3D toy, heroic brow, glossy red shell,
+                  gold eye slits, clean blue studio backdrop, centered avatar, no text"
    # WRONG approach: "muscled superhero in front of treasure city with money bags and a name
    # banner at the bottom" - that's a comic-book cover illustration; at 32px it's a brown blob.
 
@@ -212,7 +204,8 @@ Notice what these have in common:
 - Source and quoted images matter: reuse if already final, remix if the tweet's joke transforms
   the visible subject, generate only when no useful image exists
 - "generate" prompts encode the SPECIFIC joke, not "cartoon meme illustration"
-- "imageStyle" chooses the rendering language; "imagePrompt" chooses the meme subject
+- "imageStyle" chooses the rendering language; "imagePrompt" chooses the tweet-specific subject,
+  material, mood, and background
 `.trim();
 
 export function buildClassifierPrompt(tweet: Tweet): string {
@@ -306,6 +299,8 @@ Retry repair rules:
 - Fix exactly the failed field and preserve every already-valid field when possible.
 - If the failure is about name length, shorten only the name until it is <=32 UTF-8 bytes. Do NOT change imageStrategy, imageStyle, imagePrompt, remixInstructions, or a valid symbol.
 - If the failure is about symbol, change only the symbol. Do NOT change a valid name.
+- If the failure is about imagePrompt being generic, rewrite only imagePrompt, and change imageStyle
+  only if the new visual concept needs a different rendering style.
 - For plain ASCII text, bytes = characters, including spaces and punctuation. Count before returning.`
     : "";
   const imageSource = getPrimaryLaunchImageSource(tweet);
@@ -369,30 +364,35 @@ Image strategy - this is a strict decision tree, follow it in order:
 
   Step 4 (no image): imageStrategy="generate".
 
-    Frame this as a TOKEN ICON, not an illustration.
-    The output is shown at 32-64px on token lists (dexscreener, Jupiter, wallets), next to BONK,
-    WIF, POPCAT, PEPE, DOGE. Match that visual family: ONE subject (a single character face/head
-    or single chunky object), centered, filling 70-90% of the canvas, thick bold outlines, and
-    ONE flat saturated solid background color that runs all the way to every pixel of the canvas
-    edge. No environments, no scenes, no busy compositions, no editorial illustrations.
+    Frame this as a TOKEN AVATAR, not a captioned illustration.
+    The output is shown at 32-64px on token lists (dexscreener, Jupiter, wallets), so it must be
+    instantly readable as a small square avatar. It does NOT need to look like BONK/PEPE/Wojak.
+    Use the style that best fits the tweet: photoreal object, 3D toy, graphic emblem, pixel icon,
+    surreal symbol, painterly face, or a meme character when the tweet actually calls for one.
+    ONE subject only, centered, filling 70-90% of the canvas, with a clear silhouette and a simple
+    high-contrast background. No environments, no busy scenes, no editorial/cartoon panels.
 
     imagePrompt MUST encode the SPECIFIC joke of THIS tweet via the chosen subject:
-    references, characters, wordplay made visual, the punchline of the meme.
+    references, objects, materials, character archetypes, wordplay made visual, or the punchline
+    of the meme. It should be specific enough that it would not fit another launch unchanged.
     BAD: "cartoon meme illustration of {name}, bold colors"  # generic
-    GOOD: "Smug academic truth-teller archetype, raised eyebrow, head-and-shoulders close-up,
-          thick outlines, flat green background edge-to-edge"  # encodes joke + icon framing
+    BAD: "Pepe/Wojak/Doge/Chad face on a flat background" when the tweet does not ask for it.
+    GOOD: "Polished chrome shock-mask close-up, eyes blown wide, tiny sweat beads,
+          electric cyan studio backdrop"  # encodes joke + avatar framing
 
-    Keep it under ~60 words. Concrete subject + visual gag + icon framing.
+    Keep it under ~60 words. Include: concrete subject + visual gag + rendering treatment +
+    simple background. Do not leave the renderer to choose a generic cartoon look.
 
     Anti-literal rule (CRITICAL):
     Do NOT illustrate the topic the tweet is reacting TO. Illustrate the REACTION itself.
     A one-word or short reaction tweet ("Trillions", "Few.", "Bullish", "Cooked", "It's so over")
     is meme energy directed at something else; the meme is the cultural shorthand, not the subject.
     BAD for "Trillions": "river of gold coins flowing through a circuit board"
-    GOOD for "Trillions": "Wide-eyed Wojak head-and-shoulders close-up, mouth agape, sweaty,
-      pure FOMO awe. ONE flat saturated background color edge-to-edge. Thick black outline."
-    Default to a SINGLE recognizable meme character/archetype (Wojak, Pepe, Apu, Doge, Chad,
-    Brainlet, Gigachad, "this is fine" dog, etc.) doing the emotion the tweet expresses.
+    GOOD for "Trillions": "Chrome shock-mask close-up, mouth agape, sweat beads, pure FOMO awe,
+      electric cyan studio backdrop, one readable face."
+    You MAY use a SINGLE recognizable meme character/archetype (Wojak, Pepe, Apu, Doge, Chad,
+    Brainlet, etc.) when the tweet's humor is specifically a reaction-face meme. Otherwise,
+    prefer a more specific object, emblem, material, creature, or symbolic avatar.
     Avoid: landscapes, environments, scenes with multiple objects, "river of X" compositions,
     cityscapes, treasure piles, circuit-board / cyberspace backgrounds, money bags, charts —
     they read as stock crypto illustration, not as token icons.
@@ -403,12 +403,17 @@ Image strategy - this is a strict decision tree, follow it in order:
     - NO border, frame, panel, gutter, matte, vignette, or letterbox bar.
     - NO comic-book panel layouts, NO split panels, NO before/after compositions.
     - NO faux-UI / faux-screenshot / faux-news compositions.
-    - The flat background color must reach every pixel of every edge.
+    - The background must reach every pixel of every edge.
 
     imageStyle MUST choose exactly one rendering style:
-    - "classic-meme-poster": bold mascot-icon style for wordplay, catchphrases, iconic one-liners — single subject on flat saturated background.
-    - "reaction-image": single character close-up portrait icon for emotional/reaction tweets ("Trillions", "Few.", "Cooked", a smug Chad, a panicked Wojak).
-    - "clean-vector-mascot": chunky vector mascot/object/emblem icon when the tickerable subject is a creature, object, or symbol.
+    - "meme-character": simplified expressive character/mascot. Use sparingly, only when the tweet calls for a character or classic meme face.
+    - "reaction-face": one face, mask, or head close-up where the expression IS the meme ("Trillions", "Few.", "Cooked").
+    - "graphic-emblem": poster/screenprint/vector emblem for punchy phrases, wordplay, and iconic one-liners.
+    - "object-icon": one tangible object or symbolic prop with material detail.
+    - "studio-photo": photoreal macro/product-photo token avatar for physical objects, luxury, seriousness, or irony.
+    - "surreal-icon": one impossible object/creature that visualizes the punchline without becoming a scene.
+    - "pixel-icon": crisp pixel-art avatar when the joke has game/internet/retro energy.
+    - "3d-avatar": toy-like/clay/rendered object or character when tactile 3D makes the idea funnier.
 
 HARD constraints (the code validates these; failing them retries with the failure reason):
 - name: <=32 bytes after NFKC normalization. No zero-width or RTL characters. For ASCII, count every character including spaces and punctuation.

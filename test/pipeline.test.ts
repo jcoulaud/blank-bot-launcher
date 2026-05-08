@@ -191,8 +191,8 @@ function setupHappyMocks(
       name: "Doge to the moon",
       symbol: "DOGE",
       imageStrategy: "generate",
-      imageStyle: "classic-meme-poster",
-      imagePrompt: "doge",
+      imageStyle: "object-icon",
+      imagePrompt: "single gold doge rocket toy with crater-blue studio backdrop",
     },
   });
   // image generate + 2 pinata uploads
@@ -457,8 +457,8 @@ describe("runPipeline integration", () => {
         name: "Doge",
         symbol: "DOGE",
         imageStrategy: "generate",
-        imageStyle: "classic-meme-poster",
-        imagePrompt: "doge",
+        imageStyle: "object-icon",
+        imagePrompt: "single gold doge rocket toy with crater-blue studio backdrop",
       },
     });
     globalThis.fetch = vi
@@ -542,8 +542,8 @@ describe("runPipeline integration", () => {
         name: "Doge to the moon",
         symbol: "DOGE",
         imageStrategy: "generate",
-        imageStyle: "classic-meme-poster",
-        imagePrompt: "doge",
+        imageStyle: "object-icon",
+        imagePrompt: "single gold doge rocket toy with crater-blue studio backdrop",
       },
     });
     globalThis.fetch = vi.fn().mockResolvedValueOnce(geminiImageResponse()) as never;
