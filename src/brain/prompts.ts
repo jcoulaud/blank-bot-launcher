@@ -197,13 +197,28 @@ Worked examples (these reflect the right output shape):
    # WRONG approach: "muscled superhero in front of treasure city with money bags and a name
    # banner at the bottom" - that's a comic-book cover illustration; at 32px it's a brown blob.
 
+9) Tweet: "artificial general intelligence" - author: ai-founder - has image: no
+   => name="artificial general intelligence"
+      symbol="AGI"                    # acronym is the entire AI/meme hook; "$GENERAL" is too generic
+      imageStrategy="generate"
+      imageStyle="meme-character"
+     imagePrompt="Black-and-white robot wojak bust with smug side-eye and exposed neck wires,
+                  rough viral sketch style, stark white background, one meme-native character, no text"
+   # WRONG approach: "glowing chrome brain with circuit-board crystals" - generic AI stock art,
+   # not a character people recognize and not the AGI pun.
+
 Notice what these have in common:
 - Names come from the tweet itself, not "{Author}'s {topic}"
 - Punctuation and casing are preserved when they carry meaning
-- Symbol is one word from the chosen phrase, the one that vibes
+- Symbol is usually one word from the chosen phrase, the one that vibes; when the phrase forms a
+  high-signal acronym/initialism people already trade on (AGI, AI, LLM, NPC, NFT, DAO, GPU, UFO),
+  use that instead of a generic component word
 - Source and quoted images matter: reuse if already final, remix if the tweet's joke transforms
   the visible subject, generate only when no useful image exists
-- "generate" prompts encode the SPECIFIC joke, not "cartoon meme illustration"
+- "generate" prompts encode the SPECIFIC joke and feel crypto-native/trench-native, not
+  "cartoon meme illustration" or polished AI concept art
+- Avoid stale bull-market cliches: rockets, moons, laser eyes, diamond hands, coin piles, Lambos,
+  WAGMI banners, generic cyber brains, and clean corporate mascot/logo energy
 - "imageStyle" chooses the rendering language; "imagePrompt" chooses the tweet-specific subject,
   material, mood, and background
 `.trim();
@@ -224,7 +239,7 @@ Only tweets above 0.85 confidence will actually launch. Calibrate your scores so
 - below 0.5 : clearly not a meme - informational, earnest, transactional, or just normal conversation
 
 LAUNCH signals (look for these):
-- Self-contained punchy phrase that's already in meme cadence ("doge to the moon", "size does matter")
+- Self-contained punchy phrase that's already in meme cadence ("size does matter", "communities in control?")
 - Wordplay, intentional typos, deliberate misspellings that ARE the joke ("Gad's honest truth")
 - Iconic cultural references (memes, characters, in-jokes the crypto/tech crowd already recognizes)
 - Absurdism, dark humor, or self-deprecation that lands ("expert in federal non-profit law" + apu)
@@ -241,7 +256,7 @@ REJECT signals (any of these => low confidence, REJECT):
 - Tweets where you can't identify the joke. If YOU don't get it, the market won't either
 
 Important calibration notes:
-- Short tweets (3-5 words) can absolutely score 0.9+ if the phrase is sticky. "Doge to the moon" is 4 words. Don't reject for being short.
+- Short tweets can absolutely score 0.9+ if the phrase is sticky. "Few." is one word; "size does matter" is three. Don't reject for being short.
 - A typo or "wrong" word can BE the joke. Don't try to "fix" it in your reasoning.
 - Don't over-weight the author. A weak tweet from Elon is still weak. A strong meme candidate from any account remains strong.
 - If the tweet has an image that's already a meme, that's a strong launch signal; the visual asset is half the meme.
@@ -334,6 +349,10 @@ How to choose the name:
 How to choose the symbol:
 - Pick the single most ticker-worthy word from the chosen name - the word a crypto-native would actually tweet "$XXX" about.
 - Usually a noun or verb that carries the punch (SIZE, CONTROL, EXPERT, DOGE, GAD, TRUTH).
+- If the chosen name naturally forms a high-signal acronym/initialism, use it when that acronym is
+  the cultural hook (artificial general intelligence -> AGI; artificial intelligence -> AI; large
+  language model -> LLM). Do not settle for a generic word like GENERAL or MODEL when the acronym is
+  the meme.
 - Skip filler words (THE, AND, OF, IN, A, IS).
 - All uppercase. Letters and digits only.
 - Before returning, verify the symbol is <=10 UTF-8 bytes. If the strongest word is too long, choose the best shorter tickerable word from the final name.
@@ -364,9 +383,14 @@ Image strategy - this is a strict decision tree, follow it in order:
 
   Step 4 (no image): imageStrategy="generate".
 
-    Frame this as a TOKEN AVATAR, not a captioned illustration.
+    Frame this as a crypto-native TOKEN AVATAR, not a captioned illustration or corporate concept
+    image.
     The output is shown at 32-64px on token lists (dexscreener, Jupiter, wallets), so it must be
-    instantly readable as a small square avatar. It does NOT need to look like BONK/PEPE/Wojak.
+    instantly readable as a small square avatar. It should feel native to CT/Pump trenches: raw
+    meme edit, sticker, reaction persona, degen artifact, lore object, rough sketch, pixel item,
+    ugly-funny emblem, or cursed-clean 3D object when that fits the tweet.
+    Do NOT force BONK/PEPE/Wojak/Doge/Chad just because this is a memecoin. Use those archetypes
+    only when the tweet's joke actually points there.
     Use the style that best fits the tweet: photoreal object, 3D toy, graphic emblem, pixel icon,
     surreal symbol, painterly face, or a meme character when the tweet actually calls for one.
     ONE subject only, centered, filling 70-90% of the canvas, with a clear silhouette and a simple
@@ -377,6 +401,8 @@ Image strategy - this is a strict decision tree, follow it in order:
     of the meme. It should be specific enough that it would not fit another launch unchanged.
     BAD: "cartoon meme illustration of {name}, bold colors"  # generic
     BAD: "Pepe/Wojak/Doge/Chad face on a flat background" when the tweet does not ask for it.
+    BAD: rockets, moons, laser eyes, diamond hands, coin piles, Lambos, WAGMI banners, glossy
+         token logos, floating chrome brains, neural-net diagrams, or generic cyber circuit boards.
     GOOD: "Polished chrome shock-mask close-up, eyes blown wide, tiny sweat beads,
           electric cyan studio backdrop"  # encodes joke + avatar framing
 
@@ -396,6 +422,9 @@ Image strategy - this is a strict decision tree, follow it in order:
     Avoid: landscapes, environments, scenes with multiple objects, "river of X" compositions,
     cityscapes, treasure piles, circuit-board / cyberspace backgrounds, money bags, charts —
     they read as stock crypto illustration, not as token icons.
+    For AI/intelligence/genius memes, the same rule applies: if the phrase is about a persona or
+    archetype, make the persona/reaction the subject; use an AI object only when the tweet itself
+    is about the object.
 
     HARD RULES for every imagePrompt (state these in the prompt itself, not just here):
     - NO text, words, letters, numbers, captions, banners, title strips, or speech bubbles

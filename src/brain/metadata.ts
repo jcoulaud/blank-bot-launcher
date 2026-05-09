@@ -87,6 +87,23 @@ const SYMBOL_FILLERS = new Set([
   ...NAME_LOW_SIGNAL_FILLERS,
   ...NAME_CONNECTIVE_FILLERS,
 ]);
+const HIGH_SIGNAL_INITIALISMS = new Set([
+  "AGI",
+  "AI",
+  "API",
+  "CPU",
+  "CTO",
+  "DAO",
+  "ETF",
+  "GPU",
+  "IPO",
+  "IQ",
+  "LLM",
+  "NFT",
+  "NPC",
+  "UFO",
+  "ZK",
+]);
 const BLOCKED_GENERIC_IMAGE_PROMPT_PATTERNS = [
   /\bcartoon meme illustration\b/i,
   /\bbold colors?\b.*\bsimple shapes?\b/i,
@@ -214,11 +231,25 @@ function symbolCandidatesFromName(name: string): string[] {
     .reverse();
 }
 
+function highSignalInitialismFromName(name: string): string | null {
+  const words = name.toUpperCase().match(/[A-Z0-9]+/g) ?? [];
+  const meaningfulWords = words.filter((word) => !SYMBOL_FILLERS.has(word.toLowerCase()));
+  if (meaningfulWords.length < 2 || meaningfulWords.length > 5) return null;
+
+  const initialism = meaningfulWords.map((word) => word.charAt(0)).join("");
+  if (!isValidSymbolCandidate(initialism)) return null;
+  return HIGH_SIGNAL_INITIALISMS.has(initialism) ? initialism : null;
+}
+
 function repairSymbol(symbol: string, name: string): string {
   const compact = symbol
     .normalize("NFKC")
     .toUpperCase()
     .replace(/[^A-Z0-9]/g, "");
+
+  const highSignalInitialism = highSignalInitialismFromName(name);
+  if (highSignalInitialism) return highSignalInitialism;
+
   if (isValidSymbolCandidate(compact)) return compact;
 
   // Pass the reserved symbol through unchanged so validateMetadata fails

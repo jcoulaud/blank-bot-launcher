@@ -3,6 +3,7 @@ import {
   type ClassificationContext,
   generateTokenMetadata,
   type Metadata,
+  repairMetadata,
   validateMetadata,
 } from "../src/brain/metadata.js";
 import type { Tweet } from "../src/sources/tweet-source.js";
@@ -175,6 +176,29 @@ describe("validateMetadata", () => {
     const meta = { ...baseMeta, name: fourByteChar.repeat(9) };
     const failure = validateMetadata(meta, baseTweet());
     expect(failure?.field).toBe("name");
+  });
+});
+
+describe("repairMetadata", () => {
+  it("prefers high-signal initialisms over generic component words", () => {
+    const repaired = repairMetadata({
+      ...baseMeta,
+      name: "artificial general intelligence",
+      symbol: "GENERAL",
+      imagePrompt: "black-and-white robot wojak bust with exposed wires and stark white background",
+    });
+
+    expect(repaired.symbol).toBe("AGI");
+  });
+
+  it("keeps a stronger word symbol when the initials are not a known ticker hook", () => {
+    const repaired = repairMetadata({
+      ...baseMeta,
+      name: "communities in control?",
+      symbol: "CONTROL",
+    });
+
+    expect(repaired.symbol).toBe("CONTROL");
   });
 });
 

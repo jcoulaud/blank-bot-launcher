@@ -212,6 +212,8 @@ describe("prepareImage dispatch", () => {
     expect(text).toContain("single gold doge rocket toy");
     expect(text).toContain("single tangible object");
     expect(text).toContain("memecoin token avatar");
+    expect(text).toContain("trench-native");
+    expect(text).toContain("stale bull-market cliches");
     expect(text).toContain("any kind of writing");
   });
 
@@ -251,6 +253,7 @@ describe("prepareImage dispatch", () => {
     const retryText = retryBody.contents?.[0]?.parts?.[0]?.text ?? "";
     expect(retryText).toContain("safe abstract token-avatar icon");
     expect(retryText).toContain("no public figures");
+    expect(retryText).toContain("trench-native");
     expect(retryText).toContain("VITALIK");
   });
 

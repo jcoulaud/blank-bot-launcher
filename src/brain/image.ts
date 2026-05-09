@@ -14,6 +14,8 @@ const MAX_DOWNLOAD_BYTES = 5 * 1024 * 1024;
 const DOWNLOAD_TIMEOUT_MS = 30_000;
 const SAFE_FALLBACK_IMAGE_STYLE =
   "safe abstract token-avatar icon, one distinctive non-human subject or symbolic object, strong silhouette, simple high-contrast background, no public figures, no real people, no copyrighted characters, no violence, no political symbols";
+const CRYPTO_NATIVE_IMAGE_RULES =
+  "Make the visual language crypto-native and trench-native: raw meme edit, sticker, reaction persona, degen artifact, lore object, rough sketch, pixel item, ugly-funny emblem, or cursed-clean 3D object when it fits the tweet. Avoid stale bull-market cliches unless the tweet itself specifically demands them: rockets, moons, laser eyes, diamond hands, coin piles, Lambos, WAGMI banners, glossy token logos, floating chrome brains, neural-net diagrams, and generic cyber circuit boards.";
 const FRAMING_RULES =
   "OUTPUT FORMAT: a square 1:1 memecoin token avatar designed to stay recognizable at 32x32 pixels in token lists and wallet UIs. Composition: ONE main subject only, centered, occupying 70-90% of the canvas, with a strong readable silhouette. The style can be photographic, 3D, graphic, pixel, surreal, painterly, or drawn when requested. Background: simple, high-contrast, edge-to-edge, and subordinate to the subject; no busy scenery or multi-object scenes. The image MUST NOT contain ANY of: panels, comic gutters, frame lines, outer borders, mattes, vignettes, letterbox bars, padding, margins, caption strips, banner ribbons, title cards, name plates, speech bubbles, watermarks, signatures, logos, words, letters, numbers, or any kind of writing, lettering, or text whatsoever, anywhere in the image, in any language, including stylized graffiti or background text.";
 const IMAGE_STYLE_PROMPTS: Record<ImageStyle, string> = {
@@ -157,11 +159,11 @@ function buildGeneratedImagePrompt(meta: Metadata): string {
     meta.imagePrompt ??
     `Invent one distinctive visual metaphor for "${meta.name}" (${meta.symbol}) as a token avatar`;
   const style = meta.imageStyle ?? DEFAULT_GENERATED_IMAGE_STYLE;
-  return `Create a custom token avatar for this launch. Token: "${meta.name}" ($${meta.symbol}). Visual concept: ${prompt}. Rendering style: ${IMAGE_STYLE_PROMPTS[style]}. Use details from the tweet rather than a reusable mascot template. Avoid generic crypto imagery and default cartoon faces unless the concept explicitly calls for them. ${FRAMING_RULES}`;
+  return `Create a custom token avatar for this launch. Token: "${meta.name}" ($${meta.symbol}). Visual concept: ${prompt}. Rendering style: ${IMAGE_STYLE_PROMPTS[style]}. Use details from the tweet rather than a reusable mascot template. Avoid generic crypto imagery and default cartoon faces unless the concept explicitly calls for them. ${CRYPTO_NATIVE_IMAGE_RULES} ${FRAMING_RULES}`;
 }
 
 function buildSafeFallbackPrompt(meta: Metadata): string {
-  return `Create a ${SAFE_FALLBACK_IMAGE_STYLE} for a token named "${meta.name}" with ticker ${meta.symbol}. ${FRAMING_RULES}`;
+  return `Create a ${SAFE_FALLBACK_IMAGE_STYLE} for a token named "${meta.name}" with ticker ${meta.symbol}. ${CRYPTO_NATIVE_IMAGE_RULES} ${FRAMING_RULES}`;
 }
 
 function normalizeImageMimeType(mimeType: string): string | null {

@@ -134,6 +134,19 @@ describe("buildMetadataPrompt", () => {
     expect(prompt).toContain("symbol is <=10 UTF-8 bytes");
   });
 
+  it("calibrates acronym tickers and avoids generic AI-brain art", () => {
+    const prompt = buildMetadataPrompt({
+      tweet: sampleTweet,
+      classification: sampleClassification,
+    });
+
+    expect(prompt).toContain("artificial general intelligence");
+    expect(prompt).toContain('symbol="AGI"');
+    expect(prompt).toContain("GENERAL");
+    expect(prompt).toContain("floating chrome brains");
+    expect(prompt).toContain("CT/Pump trenches");
+  });
+
   it("includes classifier context, quoted text, and style choices", () => {
     const prompt = buildMetadataPrompt({
       tweet: {
@@ -157,7 +170,7 @@ describe("buildMetadataPrompt", () => {
     expect(prompt).toContain("Quoted tweet has image: no");
     expect(prompt).toContain("graphic-emblem");
     expect(prompt).toContain("studio-photo");
-    expect(prompt).toContain("It does NOT need to look like BONK/PEPE/Wojak");
+    expect(prompt).toContain("Do NOT force BONK/PEPE/Wojak/Doge/Chad");
   });
 
   it("marks quoted-tweet media as available for metadata image strategy", () => {
