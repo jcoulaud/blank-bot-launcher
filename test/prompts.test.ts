@@ -185,6 +185,31 @@ describe("buildMetadataPrompt", () => {
     expect(prompt).toContain("Anchor/Twist shape is validated");
   });
 
+  it("requires generated images to preserve explicit crypto quote context", () => {
+    const prompt = buildMetadataPrompt({
+      tweet: {
+        ...sampleTweet,
+        id: "2053607573744672791",
+        authorHandle: "toly",
+        text: "What did a jaguar say to his buddy?\n\nAaah, a talking jaguar",
+        isQuoteTweet: true,
+        quotedTweet: {
+          ...sampleTweet,
+          id: "q1",
+          authorHandle: "JagPool_xyz",
+          text: "On behalf of our Jaguar validator, we're proud to have participated as a genesis node in the community Alpenglow cluster bootstrap.",
+        },
+      },
+      classification: sampleClassification,
+    });
+
+    expect(prompt).toContain("Quote/context rule");
+    expect(prompt).toContain("strong meme/pop-culture anchor");
+    expect(prompt).toContain("Soyjak/Wojak shock-face");
+    expect(prompt).toContain("standalone wildlife sticker");
+    expect(prompt).toContain("jaguar-on-server mascot");
+  });
+
   it("documents the joke-text exception and the no-ticker rule", () => {
     const prompt = buildMetadataPrompt({
       tweet: sampleTweet,

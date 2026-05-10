@@ -243,7 +243,19 @@ Worked examples (these reflect the right output shape):
                    logos, no text overlays, no ticker."
     # Trenches "watch" is the cheap nostalgic version, deadpan, never glamour.
 
-11) Tweet: "what if we name the next model 'goblin'\n\nalmost worth it to make you all happy..." - author: sama (AI/OpenAI/ChatGPT context; no image)
+11) Tweet: "What did a jaguar say to his buddy?\n\nAaah, a talking jaguar" - author: toly
+    quoting JagPool: "On behalf of our Jaguar validator... genesis node... Alpenglow cluster bootstrap..."
+    => name="a talking jaguar"
+       symbol="JAGUAR"
+       imageStrategy="generate"
+       imageStyle="reaction-face"
+      imagePrompt="Anchor: canonical Soyjak open-mouth shock face, rough 4chan ink line, round
+                   glasses, scraggly beard, pointing finger, plain white background. Twist:
+                   jaguar-spotted validator hoodie with a crude Solana-culture patch, Alpenglow-green
+                   Solana validator-node LEDs reflected in both huge eyes, with one tiny crude jaguar
+                   silhouette perched on the node as prop. No caption, no ticker, no border."
+
+12) Tweet: "what if we name the next model 'goblin'\n\nalmost worth it to make you all happy..." - author: sama (AI/OpenAI/ChatGPT context; no image)
     => name="GoblinGPT"                 # product-context coinage beats the literal phrase "model goblin"
        symbol="GOBLINGPT"               # "$GOBLIN" misses the GPT/model hook
        imageStrategy="generate"
@@ -262,6 +274,7 @@ Patterns:
 - For product/model naming jokes by known founders or brand accounts, the strongest name may be a concise product-context coinage rather than a verbatim phrase (goblin + GPT -> GoblinGPT).
 - For images: reuse if final, remix if the tweet's joke transforms the visible subject, generate only when no useful image exists.
 - Every "generate" imagePrompt names a cultural anchor and a tweet-specific twist. No anchor = bad prompt.
+- If the tweet or quoted tweet contains explicit crypto-native context (validator, node, cluster, bootstrap, staking, DEX, chain, token, pump.fun, etc.), generated images need BOTH a strong meme/pop-culture anchor and a visible cue from that context. A literal animal/object or technical prop alone is too generic.
 - imageStyle chooses the rendering language; imagePrompt chooses the anchor, twist, and any rules-allowed joke-text.
 `.trim();
 
@@ -442,6 +455,8 @@ Image strategy - this is a strict decision tree, follow it in order:
 
     Core rule: pick a recognizable cultural anchor + a tweet-specific twist. The anchor is something the audience knows on sight; the twist is what THIS tweet adds. Without a named anchor the renderer defaults to AI concept art and the image is dead on arrival.
 
+    Quote/context rule: when the source tweet jokes about or riffs on explicit crypto-native context in the quoted tweet or source text (validator, node, cluster bootstrap, staking pool, DEX, chain upgrade, token, pump.fun, etc.), the generated imagePrompt MUST use a strong meme/pop-culture anchor (Wojak/Brainlet/Soyjak/Pepe/Doge, known movie scene, classical art, retro internet object) AND visibly fuse in that crypto context. Crypto hardware is a prop, not the anchor. Example: a "talking jaguar" joke quoting a Jaguar validator / Alpenglow cluster post should be Soyjak/Wojak shock-face with jaguar + validator-node cues, not a standalone wildlife sticker or jaguar-on-server mascot.
+
     Match the anchor family to the tweet:
     - Cope / despair / smug stupidity / identity / "I am" tweets => wojak family (brainlet, doomer, bloomer, zoomer, boomer, soyjak, NPC, chad, apu, etc.)
     - Reaction one-liners ("Few.", "Cooked", "Trillions", "It's so over") => wojak-family reaction face OR a film-still reaction (Sopranos look, Anakin "I'm sorry")
@@ -508,6 +523,7 @@ HARD constraints (the code validates these; failing them retries with the failur
 - imageStrategy must be one of {"reuse", "remix", "generate"}.
 - imagePrompt: REQUIRED if and only if imageStrategy="generate".
 - imagePrompt for generate MUST use "Anchor: ... Twist: ..." and product/model naming jokes from AI/product figures MUST include the product/brand visual anchor.
+- If tweet or quoted context is crypto-native, imagePrompt MUST include a strong meme/pop-culture anchor AND a visible crypto-native cue from that context; standalone literal subjects and technical crypto props alone are invalid.
 - imageStyle: REQUIRED if and only if imageStrategy="generate"; omit it for "reuse" or "remix".
 - remixInstructions: REQUIRED if and only if imageStrategy="remix".
 - "reuse" and "remix" both require the tweet to actually have an image (this tweet ${hasImage ? "has" : "does NOT have"} one).

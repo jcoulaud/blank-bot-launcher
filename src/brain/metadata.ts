@@ -115,6 +115,12 @@ const AI_MODEL_NAMING_WORD_RE = /\b(name|named|naming|call|called)\b/i;
 const AI_MODEL_SUBJECT_RE = /\b(model|models|gpt|llm)\b/i;
 const AI_BRAND_ANCHOR_RE = /\b(chatgpt|openai|gpt|llm|knot|brand|emblem|logo)\b/i;
 const PROMPT_SHAPE_RE = /\bAnchor\s*:.+\bTwist\s*:/is;
+const CRYPTO_CONTEXT_RE =
+  /\b(solana|validator|validators|genesis\s+node|node|nodes|cluster|bootstrap|alpenglow|mainnet|devnet|testnet|staking|stake|stakepool|pool|dex|raydium|jupiter|jito|token|mint|airdrop|wallet|ledger|on-?chain|blockchain|defi|nft|dao|pump\.?\s*fun|memecoin|crypto)\b/i;
+const CRYPTO_VISUAL_CUE_RE =
+  /\b(solana|validator|validators|genesis\s+node|node|nodes|cluster|bootstrap|alpenglow|mainnet|devnet|testnet|staking|stake|stakepool|pool|server|rack|hardware|datacenter|ledger|wallet|block|on-?chain|chain|dex|raydium|jupiter|jito|pump\.?\s*fun|crypto\s+twitter|ct|degen|memecoin|bonk|bome|slerf|mew|candle|candles)\b/i;
+const MEME_CULTURE_ANCHOR_RE =
+  /\b(wojak|feels[-\s]?guy|brainlet|doomer|bloomer|zoomer|boomer|soyjak|npc|chad|giga\s?chad|yes[-\s]?chad|nordic[-\s]?gamer|apu|pepe|doge|4chan|reddit|matrix|morpheus|sopranos|lotr|lord\s+of\s+the\s+rings|star\s+wars|anakin|akira|gta|office\s+space|renaissance|greek\s+statue|classical\s+art|casio|tamagotchi|nokia|clippy|pit\s+viper|pit\s+vipers)\b/i;
 
 export type ValidationFailure = {
   field: keyof Metadata | "imageStrategy_consistency";
@@ -158,6 +164,10 @@ function isAiModelNamingTweet(tweet: Tweet): boolean {
 
   const text = compactMetadataText(`${tweet.text} ${tweet.quotedTweet?.text ?? ""}`);
   return AI_MODEL_NAMING_WORD_RE.test(text) && AI_MODEL_SUBJECT_RE.test(text);
+}
+
+function tweetHasExplicitCryptoContext(tweet: Tweet): boolean {
+  return CRYPTO_CONTEXT_RE.test(`${tweet.text} ${tweet.quotedTweet?.text ?? ""}`);
 }
 
 function quotedModelNameCandidate(tweet: Tweet): string | null {
@@ -379,6 +389,21 @@ export function validateMetadata(meta: Metadata, tweet: Tweet): ValidationFailur
         field: "imagePrompt",
         reason:
           "imagePrompt is too generic; provide a tweet-specific subject, visual gag, rendering treatment, and simple background",
+      };
+    }
+    const hasCryptoContext = tweetHasExplicitCryptoContext(tweet);
+    if (hasCryptoContext && !CRYPTO_VISUAL_CUE_RE.test(meta.imagePrompt)) {
+      return {
+        field: "imagePrompt",
+        reason:
+          "tweet/quoted context is crypto-native; generated imagePrompt must include a visible crypto-native cue from that context (for example validator node, cluster/bootstrap, Solana/pump.fun/CT motif) instead of a standalone literal subject",
+      };
+    }
+    if (hasCryptoContext && !MEME_CULTURE_ANCHOR_RE.test(meta.imagePrompt)) {
+      return {
+        field: "imagePrompt",
+        reason:
+          "tweet/quoted context is crypto-native; generated imagePrompt must use a strong meme or pop-culture anchor (for example Wojak/Brainlet/Soyjak/Pepe/Doge, a known movie scene, classical art, or retro internet object). Technical crypto props alone are not enough.",
       };
     }
     if (isAiModelNamingTweet(tweet) && !AI_BRAND_ANCHOR_RE.test(meta.imagePrompt)) {

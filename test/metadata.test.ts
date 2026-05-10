@@ -33,6 +33,20 @@ const quoteTweetWithImage = (): Tweet => ({
   },
 });
 
+const jaguarCryptoQuoteTweet = (): Tweet => ({
+  ...baseTweet(false),
+  id: "2053607573744672791",
+  authorHandle: "toly",
+  text: "What did a jaguar say to his buddy?\n\nAaah, a talking jaguar",
+  isQuoteTweet: true,
+  quotedTweet: {
+    ...baseTweet(false),
+    id: "q-jagpool",
+    authorHandle: "JagPool_xyz",
+    text: "On behalf of our Jaguar validator, we're proud to have participated as a genesis node in the community Alpenglow cluster bootstrap.",
+  },
+});
+
 const aiModelNamingTweet = (): Tweet => ({
   ...baseTweet(false),
   authorHandle: "sama",
@@ -188,6 +202,46 @@ describe("validateMetadata", () => {
         "Anchor: ChatGPT/OpenAI knot-logo silhouette redrawn as a parody emblem. Twist: the loops become goblin ears, narrowed eyes, and a jagged grin, flat monochrome sticker on white, no caption, no ticker.",
     };
     expect(validateMetadata(meta, aiModelNamingTweet())).toBeNull();
+  });
+
+  it("rejects generated prompts that ignore explicit crypto quote context", () => {
+    const meta: Metadata = {
+      ...baseMeta,
+      name: "a talking jaguar",
+      symbol: "JAGUAR",
+      imageStyle: "graphic-emblem",
+      imagePrompt:
+        "Anchor: green jaguar head sticker. Twist: mouth open in surprise on a jungle-green background, no caption, no ticker.",
+    };
+    const failure = validateMetadata(meta, jaguarCryptoQuoteTweet());
+    expect(failure?.field).toBe("imagePrompt");
+    expect(failure?.reason).toMatch(/crypto-native/);
+  });
+
+  it("rejects technical crypto props without a meme or pop-culture anchor", () => {
+    const meta: Metadata = {
+      ...baseMeta,
+      name: "a talking jaguar",
+      symbol: "JAGUAR",
+      imageStyle: "graphic-emblem",
+      imagePrompt:
+        "Anchor: crude MEW/BONK-style jaguar token mascot crouched on a tiny Solana validator server rack. Twist: mouth open in deadpan shock at a second jaguar silhouette, Alpenglow-green glow behind node LEDs, no caption, no ticker.",
+    };
+    const failure = validateMetadata(meta, jaguarCryptoQuoteTweet());
+    expect(failure?.field).toBe("imagePrompt");
+    expect(failure?.reason).toMatch(/meme or pop-culture anchor/);
+  });
+
+  it("accepts prompts that fuse crypto quote context through a meme anchor", () => {
+    const meta: Metadata = {
+      ...baseMeta,
+      name: "a talking jaguar",
+      symbol: "JAGUAR",
+      imageStyle: "reaction-face",
+      imagePrompt:
+        "Anchor: canonical Soyjak open-mouth shock face, rough 4chan ink line, round glasses, scraggly beard, pointing finger, plain white background. Twist: jaguar-spotted validator hoodie with a crude Solana-culture patch, Alpenglow-green Solana validator-node LEDs reflected in both huge eyes, with one tiny crude jaguar silhouette perched on the node as prop. No caption, no ticker, no border.",
+    };
+    expect(validateMetadata(meta, jaguarCryptoQuoteTweet())).toBeNull();
   });
 
   it("accepts reuse when tweet has an image", () => {
@@ -354,6 +408,40 @@ describe("generateTokenMetadata retry loop", () => {
       expect(result.metadata.symbol).toBe("GOBLINGPT");
     }
     expect(promptTextFromCall(1)).toContain("GoblinGPT");
+  });
+
+  it("retries generated image prompts that drop crypto quote context", async () => {
+    generateObjectMock.mockReset();
+    generateObjectMock.mockResolvedValueOnce({
+      object: {
+        name: "a talking jaguar",
+        symbol: "JAGUAR",
+        imageStrategy: "generate",
+        imageStyle: "graphic-emblem",
+        imagePrompt:
+          "Anchor: crude MEW/BONK-style jaguar token mascot crouched on a tiny Solana validator server rack. Twist: mouth open in deadpan shock at a second jaguar silhouette, Alpenglow-green glow behind node LEDs, no caption, no ticker.",
+      },
+    });
+    generateObjectMock.mockResolvedValueOnce({
+      object: {
+        name: "a talking jaguar",
+        symbol: "JAGUAR",
+        imageStrategy: "generate",
+        imageStyle: "reaction-face",
+        imagePrompt:
+          "Anchor: canonical Soyjak open-mouth shock face, rough 4chan ink line, round glasses, scraggly beard, pointing finger, plain white background. Twist: jaguar-spotted validator hoodie with a crude Solana-culture patch, Alpenglow-green Solana validator-node LEDs reflected in both huge eyes, with one tiny crude jaguar silhouette perched on the node as prop. No caption, no ticker, no border.",
+      },
+    });
+
+    const result = await generateTokenMetadata(jaguarCryptoQuoteTweet(), metadataOptions());
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.attempts).toBe(2);
+      expect(result.metadata.name).toBe("a talking jaguar");
+      expect(result.metadata.imageStyle).toBe("reaction-face");
+    }
+    expect(promptTextFromCall(1)).toContain("meme or pop-culture anchor");
   });
 
   it("returns ok=false after maxAttempts when both attempts fail", async () => {
