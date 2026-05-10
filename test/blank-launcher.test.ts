@@ -48,7 +48,8 @@ const meta: Metadata = {
   symbol: "DOGE",
   imageStrategy: "generate",
   imageStyle: "object-icon",
-  imagePrompt: "single gold doge rocket toy with crater-blue studio backdrop",
+  imagePrompt:
+    "Anchor: single gold doge rocket toy. Twist: crater-blue studio backdrop with taped-on astronaut fin, plain background, no caption, no ticker.",
 };
 
 beforeEach(() => {

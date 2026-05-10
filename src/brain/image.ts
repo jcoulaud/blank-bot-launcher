@@ -14,15 +14,15 @@ const MAX_DOWNLOAD_BYTES = 5 * 1024 * 1024;
 const DOWNLOAD_TIMEOUT_MS = 30_000;
 const SAFE_FALLBACK_IMAGE_STYLE =
   "safe abstract token-avatar icon, one distinctive non-human subject or symbolic object, strong silhouette, simple high-contrast background, no public figures, no real people, no copyrighted characters, no violence, no political symbols";
-const TRENCHES_RULES = `Token avatar lives in Solana memecoin culture (r/SolanaMemeCoins, pump.fun, Crypto Twitter). Core principle: pick a recognizable cultural anchor (meme character, film/TV scene, classical art, retro-game sprite, brand, animal-token archetype) and add the tweet's specific twist.
+const TRENCHES_RULES = `Token avatar lives in Solana memecoin culture (r/SolanaMemeCoins, pump.fun, Crypto Twitter). Core principle: pick a recognizable cultural anchor (meme character, film/TV scene, classical art, retro-game sprite, brand/product visual language, animal-token archetype) and add the tweet's specific twist.
 
 When the imagePrompt names a wojak-family character (wojak/feels-guy, brainlet, doomer, bloomer, zoomer, boomer, trad, chad, soyjak, NPC, apu, pepe, schizo, yes-chad/nordic-gamer), reproduce the canonical 4chan/Reddit template: rough hand-drawn black ink line (irregular, not vector-clean), full Wojak face features (prominent forehead, defined nose with nostril-shadow, full cheeks/chin/neck, bare shoulders), white face fill, plain white background, scribbled cross-hatch shading where the canonical meme has it. Brainlet specifically: full Wojak head with two black-dot pupils set wide apart, asymmetric crooked smug grin, optional open-skull edit at top — never a clean cartoon bowl with eyes. GigaChad is rendered as B&W photoreal extreme-jawline portrait.
 
-Avoid generic AI concept art: chrome brains, neural-net diagrams, cyber circuit boards, glowing token logos, rockets/moons/laser-eyes/diamond-hands/coin-piles/Lambos/WAGMI banners, "trending on artstation" polish, cinematic Octane/Unreal renders. Polish is fine only when it IS the cultural anchor (a real Renaissance statue, a Matrix-grade film still, an anime cel) — then add the trenches twist on top.`;
+Avoid generic AI concept art: chrome brains, neural-net diagrams, cyber circuit boards, glowing token logos, rockets/moons/laser-eyes/diamond-hands/coin-piles/Lambos/WAGMI banners, "trending on artstation" polish, cinematic Octane/Unreal renders. Product/model naming jokes need the product's visual language remixed with the proposed name; a literal creature or object holding a sign is too weak. Polish is fine only when it IS the cultural anchor (a real Renaissance statue, a Matrix-grade film still, an anime cel) — then add the trenches twist on top.`;
 
 const FRAMING_RULES = `Square 1:1 token avatar, recognizable at 32-64px in token lists. One main subject (the cultural anchor) centered, 60-90% of the canvas, strong silhouette. Plain edge-to-edge background by default; scene backgrounds allowed only when part of the anchor (Matrix void, retro-game pixel scene, sticker-collage with a few elements that reinforce the joke). Never AI-default cyber/circuit/neon-corridor backgrounds.
 
-Forbidden: panels, comic gutters, frame lines, borders, mattes, vignettes, letterbox bars, caption strips (no Impact-font top/bottom-text captions), banner ribbons, title cards, name plates, speech bubbles, watermarks, signatures, logos, the token's ticker/symbol, "$"-prefixed text, multiple text elements, decorative branding text.
+Forbidden: panels, comic gutters, frame lines, borders, mattes, vignettes, letterbox bars, caption strips (no Impact-font top/bottom-text captions), banner ribbons, title cards, name plates, speech bubbles, watermarks, signatures, decorative logos, the token's ticker/symbol, "$"-prefixed text, multiple text elements, decorative branding text. Brand marks are allowed only when the prompt explicitly names that brand/product visual language as the cultural anchor; redraw as parody/remix, no exact wordmark.
 
 Text exception: when the imagePrompt explicitly asks for joke-text on a single in-scene physical element (sign, banner, license plate, tombstone, hat patch, billboard) AND that text IS the punchline, render it — ≤3 words, ≤12 characters, on that one element only, spelled cleanly, reading as a real object inside the world rather than a meme caption.`;
 
@@ -32,7 +32,7 @@ const IMAGE_STYLE_PROMPTS: Record<ImageStyle, string> = {
   "reaction-face":
     "Named meme-face close-up where the expression IS the joke (wojak shock, brainlet smug, doomer despair, bloomer hopeful, chad approval, apu sad, soyjak open-mouth shock; GigaChad as B&W photoreal portrait). Canonical 4chan template: rough hand-drawn ink line, white face, plain white background, scribbled cross-hatch shading where canonical has it.",
   "graphic-emblem":
-    "Screenprint/sticker-pack emblem: hard flat color blocks, no gradients, sticker-cut silhouette. BOME/SLERF/MEW energy. One subject, plain background.",
+    "Screenprint/sticker-pack emblem: hard flat color blocks, no gradients, sticker-cut silhouette. BOME/SLERF/MEW energy. One subject, plain background. Can be a parody/remix of a brand/product mark only when that brand is the explicit cultural anchor; no exact wordmark.",
   "object-icon":
     "Single tangible object as the cultural anchor (Tamagotchi, Casio, syringe, tombstone, etc.) plus the tweet's twist. Hand-drawn line, sticker, or amateur 3D. No face unless the tweet calls for one.",
   "studio-photo":

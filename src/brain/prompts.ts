@@ -130,6 +130,10 @@ Examples (study these - they set the bar):
 13) Tweet: "5.5 is an autistic genius with very strange taste in naming" - author: sama - has image: no
     => shouldLaunch=true, confidence=0.92, launchableMeme=true, memeSource="tweet_text", visualAssessment="none", disqualifiers=[]
       reason="reframed-acronym pun: 'autistic genius' from an AI-founder talking about a model implies AGI (autistic genius intelligence). The initialism alignment IS the joke; high-signal trenches ticker"
+
+14) Tweet: "what if we name the next model 'goblin'\n\nalmost worth it to make you all happy..." - author: sama - has image: no
+    => shouldLaunch=true, confidence=0.94, launchableMeme=true, memeSource="tweet_text", visualAssessment="none", disqualifiers=[]
+      reason="AI product-founder joking about naming a future model 'goblin'; the meme is goblin fused with ChatGPT/GPT model lore, not a generic fantasy creature"
 `.trim();
 
 const METADATA_FEW_SHOT = `
@@ -239,9 +243,23 @@ Worked examples (these reflect the right output shape):
                    logos, no text overlays, no ticker."
     # Trenches "watch" is the cheap nostalgic version, deadpan, never glamour.
 
+11) Tweet: "what if we name the next model 'goblin'\n\nalmost worth it to make you all happy..." - author: sama (AI/OpenAI/ChatGPT context; no image)
+    => name="GoblinGPT"                 # product-context coinage beats the literal phrase "model goblin"
+       symbol="GOBLINGPT"               # "$GOBLIN" misses the GPT/model hook
+       imageStrategy="generate"
+       imageStyle="graphic-emblem"
+      imagePrompt="Anchor: ChatGPT/OpenAI knot-logo silhouette as a simple black-line emblem,
+                   intentionally redrawn as parody rather than an exact logo. Twist: the knot loops
+                   become a mischievous goblin face with pointed ears, narrowed eyes, and a jagged
+                   grin integrated into the mark. Flat monochrome sticker on white, no wordmark, no
+                   caption, no ticker."
+    # Principle: when a known product/founder jokes about a model/product name, combine the proposed
+    # name with the product's visual language. Literal creature art holding a sign is too weak.
+
 Patterns:
 - Names come from the tweet itself, not "{Author}'s {topic}". Preserve punctuation/casing when it carries meaning.
 - Symbol is the load-bearing word from the name. When the words spell a high-signal initialism the trenches already trade on (AGI, AI, LLM, NPC, NFT, DAO, GPU, UFO), use it - including non-obvious cases (autistic-genius-intelligence -> AGI).
+- For product/model naming jokes by known founders or brand accounts, the strongest name may be a concise product-context coinage rather than a verbatim phrase (goblin + GPT -> GoblinGPT).
 - For images: reuse if final, remix if the tweet's joke transforms the visible subject, generate only when no useful image exists.
 - Every "generate" imagePrompt names a cultural anchor and a tweet-specific twist. No anchor = bad prompt.
 - imageStyle chooses the rendering language; imagePrompt chooses the anchor, twist, and any rules-allowed joke-text.
@@ -371,6 +389,11 @@ How to choose the name:
 5. Only invent a name as a last resort when no clean phrase exists AND the meme is purely visual. Even then, lean on language from the tweet.
 6. Do NOT "correct" typos or unusual spellings. If the tweet says "Gad's" instead of "God's", that misspelling IS the meme; keep it.
 
+PRODUCT-CONTEXT COINAGE EXCEPTION (overrides verbatim when it applies):
+When a known founder, CEO, or brand account jokes about naming/releasing a product, model, app, chain, or token, infer the product ecosystem from the author and wording. The best coin often fuses the proposed name with the product lineage instead of copying the literal phrase.
+- If @sama / OpenAI / ChatGPT context says the next model might be named "goblin", the trade is "GoblinGPT" ($GOBLINGPT), not "model goblin" ($GOBLIN). The model/product context is the edge.
+- Apply only when the product lineage is obvious from the author/text. Do not force product suffixes when the author context is unknown or the tweet is just a standalone phrase.
+
 INITIALISM-COMPLETION EXCEPTION (overrides "verbatim" when it applies):
 When the tweet contains a sequence of 2-or-more adjacent words whose initials, plus ONE obvious missing word implied by the tweet's topic, would form a known high-signal initialism the trenches already trade on (AGI, AI, LLM, NPC, NFT, DAO, ETF, GPU, UFO, IQ, IPO, CPU, CTO, ZK, API), you SHOULD complete the phrase. Add the one obvious implied word so the resulting name's initialism IS the punchline, and use that initialism as the symbol.
 - The implied word must be the obvious one given the tweet's subject. If the tweet is about an AI model and the present words are "autistic genius", the implied missing word is "intelligence" -> "autistic genius intelligence" -> AGI. If the tweet is about a character and the present words are "non playable", the implied missing word is "character" -> "non playable character" -> NPC. Do not stretch.
@@ -427,6 +450,7 @@ Image strategy - this is a strict decision tree, follow it in order:
     - Game / retro / internet-native ("respawn", "boss fight", "high score") => pixel-icon retro sprite with NES/SNES palette
     - Everyday object / luxury-irony ("watch guy", "dad shit") => studio-photo of a cheap real object (Casio, Nokia 3310, bodega energy drink, brick) shot deadpan on a phone camera
     - Brand / political / nostalgia tech (MAGA, Pit Vipers, Yeezys, Clippy, Tamagotchi) => brand-as-emblem (graphic-emblem) or brand pasted onto an unexpected anchor (photo-collage)
+    - Tech-founder/product naming joke ("next model named goblin" from OpenAI/ChatGPT context) => brand/product visual-language mashup (graphic-emblem), e.g. ChatGPT/OpenAI knot silhouette redrawn with goblin ears/eyes/grin. NEVER a generic creature holding a sign.
     - Solana-native mascot lore / pump.fun / pill-brain alien => meme-character or 3d-avatar with consistent mascot traits
     - Animal-token archetype (shiba, cat, frog, goat) => crude phone-camera animal photo OR drawn-line cousin of the animal
     - When in doubt, pick what the audience would post first under this tweet on CT. The more surprising fit beats the obvious one (Renaissance statue beats wojak for a polished-tone joke).
@@ -454,12 +478,13 @@ Image strategy - this is a strict decision tree, follow it in order:
 
     Punchline-as-visual-prop: for short reaction or identity phrases, one character + one in-scene physical prop or sign that IS the joke (BOTTOMLESS-PIT brainlet, AGI).
 
-    imagePrompt shape: "Anchor: <recognizable anchor>. Twist: <tweet-specific change>. <rendering + background + rules>." Specific enough that it would not fit another launch unchanged. Under ~80 words.
+    imagePrompt shape: "Anchor: <recognizable anchor>. Twist: <tweet-specific change>. <rendering + background + rules>." Specific enough that it would not fit another launch unchanged. Under ~80 words. This exact Anchor/Twist shape is validated.
 
     Hard rules for every imagePrompt (state them in the prompt itself, not just here):
     - The token's ticker / symbol MUST NOT appear in the image. No "$XXX", no XXX, ever.
     - No Impact-font top-text/bottom-text meme captions.
-    - No border, frame, panel, gutter, matte, vignette, letterbox bar, watermark, signature, logo.
+    - No border, frame, panel, gutter, matte, vignette, letterbox bar, watermark, signature, or decorative logo.
+    - Brand marks are allowed ONLY when the brand/product visual language is the explicit cultural anchor. Redraw as parody/remix; no exact wordmark, no clean corporate logo reproduction.
     - No comic-book panel layouts, split panels, before/after compositions, faux-UI/faux-screenshot/faux-news compositions.
     - The background reaches every pixel of every edge.
 
@@ -482,6 +507,7 @@ HARD constraints (the code validates these; failing them retries with the failur
 - symbol: matches /^[A-Z0-9]+$/, <=10 bytes, NOT one of the reserved tickers ${reservedList}. If the selected word is longer, choose another word from the final name.
 - imageStrategy must be one of {"reuse", "remix", "generate"}.
 - imagePrompt: REQUIRED if and only if imageStrategy="generate".
+- imagePrompt for generate MUST use "Anchor: ... Twist: ..." and product/model naming jokes from AI/product figures MUST include the product/brand visual anchor.
 - imageStyle: REQUIRED if and only if imageStrategy="generate"; omit it for "reuse" or "remix".
 - remixInstructions: REQUIRED if and only if imageStrategy="remix".
 - "reuse" and "remix" both require the tweet to actually have an image (this tweet ${hasImage ? "has" : "does NOT have"} one).

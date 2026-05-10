@@ -159,6 +159,19 @@ describe("buildMetadataPrompt", () => {
     expect(prompt).toContain("brainlet");
   });
 
+  it("teaches product-context naming and brand-remix art for AI model jokes", () => {
+    const prompt = buildMetadataPrompt({
+      tweet: sampleTweet,
+      classification: sampleClassification,
+    });
+
+    expect(prompt).toContain("GoblinGPT");
+    expect(prompt).toContain("GOBLINGPT");
+    expect(prompt).toContain("ChatGPT/OpenAI knot");
+    expect(prompt).toContain("product-context coinage");
+    expect(prompt).toContain("generic creature holding a sign");
+  });
+
   it("requires cultural anchor + tweet-specific twist for generated images", () => {
     const prompt = buildMetadataPrompt({
       tweet: sampleTweet,
@@ -169,6 +182,7 @@ describe("buildMetadataPrompt", () => {
     expect(prompt).toContain("twist");
     expect(prompt).toContain("photo-collage");
     expect(prompt).toContain("Punchline-as-visual-prop");
+    expect(prompt).toContain("Anchor/Twist shape is validated");
   });
 
   it("documents the joke-text exception and the no-ticker rule", () => {

@@ -33,12 +33,19 @@ const quoteTweetWithImage = (): Tweet => ({
   },
 });
 
+const aiModelNamingTweet = (): Tweet => ({
+  ...baseTweet(false),
+  authorHandle: "sama",
+  text: 'what if we name the next model "goblin"\n\nalmost worth it to make you all happy...',
+});
+
 const baseMeta: Metadata = {
   name: "Elon Doge",
   symbol: "EDOGE",
   imageStrategy: "generate",
   imageStyle: "object-icon",
-  imagePrompt: "single gold doge rocket toy with crater-blue studio backdrop",
+  imagePrompt:
+    "Anchor: single gold doge rocket toy. Twist: crater-blue studio backdrop with taped-on astronaut fin, plain background, no caption, no ticker.",
 };
 const fourByteChar = String.fromCodePoint(0x1f680);
 const baseClassification: ClassificationContext = {
@@ -112,7 +119,17 @@ describe("validateMetadata", () => {
     };
     const failure = validateMetadata(meta, baseTweet());
     expect(failure?.field).toBe("imagePrompt");
-    expect(failure?.reason).toMatch(/too generic/);
+    expect(failure?.reason).toMatch(/Anchor/);
+  });
+
+  it("rejects generated image prompts that omit the Anchor/Twist shape", () => {
+    const meta: Metadata = {
+      ...baseMeta,
+      imagePrompt: "single gold doge rocket toy with crater-blue studio backdrop",
+    };
+    const failure = validateMetadata(meta, baseTweet());
+    expect(failure?.field).toBe("imagePrompt");
+    expect(failure?.reason).toMatch(/Anchor/);
   });
 
   it("rejects generate without imageStyle", () => {
@@ -145,6 +162,32 @@ describe("validateMetadata", () => {
     const failure = validateMetadata(meta, baseTweet(false));
     expect(failure?.field).toBe("imageStrategy_consistency");
     expect(failure?.reason).toMatch(/no image to reuse/);
+  });
+
+  it("rejects generic literal metadata for AI model naming jokes", () => {
+    const meta: Metadata = {
+      ...baseMeta,
+      name: 'model "goblin"',
+      symbol: "GOBLIN",
+      imageStyle: "meme-character",
+      imagePrompt:
+        "Anchor: green goblin cartoon character holding a sign. Twist: the sign says MODEL GOBLIN, white background, no ticker.",
+    };
+    const failure = validateMetadata(meta, aiModelNamingTweet());
+    expect(failure?.field).toBe("name");
+    expect(failure?.reason).toMatch(/GoblinGPT/i);
+  });
+
+  it("accepts product-context metadata for AI model naming jokes", () => {
+    const meta: Metadata = {
+      ...baseMeta,
+      name: "GoblinGPT",
+      symbol: "GOBLINGPT",
+      imageStyle: "graphic-emblem",
+      imagePrompt:
+        "Anchor: ChatGPT/OpenAI knot-logo silhouette redrawn as a parody emblem. Twist: the loops become goblin ears, narrowed eyes, and a jagged grin, flat monochrome sticker on white, no caption, no ticker.",
+    };
+    expect(validateMetadata(meta, aiModelNamingTweet())).toBeNull();
   });
 
   it("accepts reuse when tweet has an image", () => {
@@ -185,7 +228,8 @@ describe("repairMetadata", () => {
       ...baseMeta,
       name: "artificial general intelligence",
       symbol: "GENERAL",
-      imagePrompt: "black-and-white robot wojak bust with exposed wires and stark white background",
+      imagePrompt:
+        "Anchor: black-and-white robot wojak bust. Twist: exposed wires spilling from a cracked skull on stark white background, no caption, no ticker.",
     });
 
     expect(repaired.symbol).toBe("AGI");
@@ -236,7 +280,8 @@ describe("generateTokenMetadata retry loop", () => {
         symbol: "DOGE",
         imageStrategy: "generate",
         imageStyle: "object-icon",
-        imagePrompt: "single gold doge rocket toy with crater-blue studio backdrop",
+        imagePrompt:
+          "Anchor: single gold doge rocket toy. Twist: crater-blue studio backdrop with taped-on astronaut fin, plain background, no caption, no ticker.",
       },
     });
     const result = await generateTokenMetadata(baseTweet(), metadataOptions());
@@ -256,7 +301,8 @@ describe("generateTokenMetadata retry loop", () => {
         symbol: "SOL",
         imageStrategy: "generate",
         imageStyle: "graphic-emblem",
-        imagePrompt: "molten gold sun medallion with sunglasses and teal summer backdrop",
+        imagePrompt:
+          "Anchor: molten gold sun medallion. Twist: crooked sunglasses and teal summer backdrop, flat sticker edge, no caption, no ticker.",
       },
     });
     // Second attempt fixes it
@@ -266,7 +312,8 @@ describe("generateTokenMetadata retry loop", () => {
         symbol: "SOLAR",
         imageStrategy: "generate",
         imageStyle: "graphic-emblem",
-        imagePrompt: "molten gold sun medallion with sunglasses and teal summer backdrop",
+        imagePrompt:
+          "Anchor: molten gold sun medallion. Twist: crooked sunglasses and teal summer backdrop, flat sticker edge, no caption, no ticker.",
       },
     });
     const result = await generateTokenMetadata(baseTweet(), metadataOptions());
@@ -274,6 +321,39 @@ describe("generateTokenMetadata retry loop", () => {
     if (result.ok) expect(result.attempts).toBe(2);
     // Second call should have received a prompt mentioning the previous failure
     expect(promptTextFromCall(1)).toContain("previous attempt failed");
+  });
+
+  it("retries literal AI-model naming outputs toward a product-context coinage", async () => {
+    generateObjectMock.mockReset();
+    generateObjectMock.mockResolvedValueOnce({
+      object: {
+        name: 'model "goblin"',
+        symbol: "GOBLIN",
+        imageStrategy: "generate",
+        imageStyle: "meme-character",
+        imagePrompt:
+          "Anchor: green goblin cartoon character holding a sign. Twist: the sign says MODEL GOBLIN, white background, no ticker.",
+      },
+    });
+    generateObjectMock.mockResolvedValueOnce({
+      object: {
+        name: "GoblinGPT",
+        symbol: "GOBLINGPT",
+        imageStrategy: "generate",
+        imageStyle: "graphic-emblem",
+        imagePrompt:
+          "Anchor: ChatGPT/OpenAI knot-logo silhouette redrawn as a parody emblem. Twist: the loops become goblin ears, narrowed eyes, and a jagged grin, flat monochrome sticker on white, no caption, no ticker.",
+      },
+    });
+
+    const result = await generateTokenMetadata(aiModelNamingTweet(), metadataOptions());
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.metadata.name).toBe("GoblinGPT");
+      expect(result.metadata.symbol).toBe("GOBLINGPT");
+    }
+    expect(promptTextFromCall(1)).toContain("GoblinGPT");
   });
 
   it("returns ok=false after maxAttempts when both attempts fail", async () => {
@@ -303,7 +383,8 @@ describe("generateTokenMetadata retry loop", () => {
         symbol: "doge",
         imageStrategy: "generate",
         imageStyle: "object-icon",
-        imagePrompt: "single gold doge rocket toy with crater-blue studio backdrop",
+        imagePrompt:
+          "Anchor: single gold doge rocket toy. Twist: crater-blue studio backdrop with taped-on astronaut fin, plain background, no caption, no ticker.",
       },
     });
     const result = await generateTokenMetadata(baseTweet(), metadataOptions());

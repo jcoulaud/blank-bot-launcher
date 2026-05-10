@@ -110,6 +110,11 @@ const BLOCKED_GENERIC_IMAGE_PROMPT_PATTERNS = [
   /\bbold colors?\b.*\bsimple shapes?\b/i,
   /^\s*(doge|pepe|wojak|chad|meme|token|coin|logo|icon)\s*$/i,
 ] as const;
+const AI_MODEL_AUTHOR_HANDLES = new Set(["sama", "openai", "gdb"]);
+const AI_MODEL_NAMING_WORD_RE = /\b(name|named|naming|call|called)\b/i;
+const AI_MODEL_SUBJECT_RE = /\b(model|models|gpt|llm)\b/i;
+const AI_BRAND_ANCHOR_RE = /\b(chatgpt|openai|gpt|llm|knot|brand|emblem|logo)\b/i;
+const PROMPT_SHAPE_RE = /\bAnchor\s*:.+\bTwist\s*:/is;
 
 export type ValidationFailure = {
   field: keyof Metadata | "imageStrategy_consistency";
@@ -145,6 +150,36 @@ function isGenericGeneratedImagePrompt(prompt: string, name: string): boolean {
     .split(" ")
     .filter((word) => word.length > 2 && !SYMBOL_FILLERS.has(word));
   return meaningfulWords.length < 3;
+}
+
+function isAiModelNamingTweet(tweet: Tweet): boolean {
+  const handle = tweet.authorHandle.toLowerCase();
+  if (!AI_MODEL_AUTHOR_HANDLES.has(handle)) return false;
+
+  const text = compactMetadataText(`${tweet.text} ${tweet.quotedTweet?.text ?? ""}`);
+  return AI_MODEL_NAMING_WORD_RE.test(text) && AI_MODEL_SUBJECT_RE.test(text);
+}
+
+function quotedModelNameCandidate(tweet: Tweet): string | null {
+  const text = `${tweet.text} ${tweet.quotedTweet?.text ?? ""}`;
+  const patterns = [
+    /["“]([A-Za-z][A-Za-z0-9 -]{0,20})["”]/,
+    /[‘]([A-Za-z][A-Za-z0-9 -]{0,20})[’]/,
+    /(?:^|\s)'([A-Za-z][A-Za-z0-9 -]{0,20})'(?:\s|$|[.,!?])/,
+  ];
+  for (const pattern of patterns) {
+    const match = text.match(pattern);
+    const candidate = match?.[1]?.trim();
+    if (candidate) return candidate;
+  }
+  return null;
+}
+
+function normalizeTokenishText(s: string): string {
+  return s
+    .normalize("NFKC")
+    .toLowerCase()
+    .replace(/[^a-z0-9]/g, "");
 }
 
 function normalizeWordForMatching(word: string): string {
@@ -303,6 +338,28 @@ export function validateMetadata(meta: Metadata, tweet: Tweet): ValidationFailur
     return { field: "symbol", reason: `symbol "${symbol}" is reserved (SOL/USDC/BLNK)` };
   }
 
+  if (isAiModelNamingTweet(tweet)) {
+    const modelNameCandidate = quotedModelNameCandidate(tweet);
+    if (modelNameCandidate) {
+      const expectedNameToken = `${normalizeTokenishText(modelNameCandidate)}gpt`;
+      const actualNameToken = normalizeTokenishText(nameNormalized);
+      if (!actualNameToken.includes(expectedNameToken)) {
+        return {
+          field: "name",
+          reason: `AI model naming tweets should coin the product-context name "${modelNameCandidate}GPT" rather than a literal phrase`,
+        };
+      }
+    }
+
+    if (!symbol.includes("GPT")) {
+      return {
+        field: "symbol",
+        reason:
+          "AI model naming tweets from AI/product figures should use a GPT/product-context ticker",
+      };
+    }
+  }
+
   if (meta.imageStrategy === "generate") {
     if (!meta.imagePrompt) {
       return {
@@ -310,11 +367,25 @@ export function validateMetadata(meta: Metadata, tweet: Tweet): ValidationFailur
         reason: `imageStrategy="generate" but imagePrompt is missing`,
       };
     }
+    if (!PROMPT_SHAPE_RE.test(meta.imagePrompt)) {
+      return {
+        field: "imagePrompt",
+        reason:
+          'imagePrompt must use the exact shape "Anchor: <recognizable anchor>. Twist: <tweet-specific change>."',
+      };
+    }
     if (isGenericGeneratedImagePrompt(meta.imagePrompt, meta.name)) {
       return {
         field: "imagePrompt",
         reason:
           "imagePrompt is too generic; provide a tweet-specific subject, visual gag, rendering treatment, and simple background",
+      };
+    }
+    if (isAiModelNamingTweet(tweet) && !AI_BRAND_ANCHOR_RE.test(meta.imagePrompt)) {
+      return {
+        field: "imagePrompt",
+        reason:
+          "AI model naming tweets need an AI-brand/product anchor (ChatGPT/OpenAI/GPT/knot/emblem), not a literal creature or object only",
       };
     }
   }

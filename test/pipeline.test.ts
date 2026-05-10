@@ -192,7 +192,8 @@ function setupHappyMocks(
       symbol: "DOGE",
       imageStrategy: "generate",
       imageStyle: "object-icon",
-      imagePrompt: "single gold doge rocket toy with crater-blue studio backdrop",
+      imagePrompt:
+        "Anchor: single gold doge rocket toy. Twist: crater-blue studio backdrop with taped-on astronaut fin, plain background, no caption, no ticker.",
     },
   });
   // image generate + 2 pinata uploads
@@ -458,7 +459,8 @@ describe("runPipeline integration", () => {
         symbol: "DOGE",
         imageStrategy: "generate",
         imageStyle: "object-icon",
-        imagePrompt: "single gold doge rocket toy with crater-blue studio backdrop",
+        imagePrompt:
+          "Anchor: single gold doge rocket toy. Twist: crater-blue studio backdrop with taped-on astronaut fin, plain background, no caption, no ticker.",
       },
     });
     globalThis.fetch = vi
@@ -543,7 +545,8 @@ describe("runPipeline integration", () => {
         symbol: "DOGE",
         imageStrategy: "generate",
         imageStyle: "object-icon",
-        imagePrompt: "single gold doge rocket toy with crater-blue studio backdrop",
+        imagePrompt:
+          "Anchor: single gold doge rocket toy. Twist: crater-blue studio backdrop with taped-on astronaut fin, plain background, no caption, no ticker.",
       },
     });
     globalThis.fetch = vi.fn().mockResolvedValueOnce(geminiImageResponse()) as never;
