@@ -51,7 +51,7 @@ const env: Env = {
   GOOGLE_GENERATIVE_AI_API_KEY: "x",
   PINATA_JWT: "jwt",
   LLM_MODEL: "gemini-2.5-flash",
-  IMAGE_MODEL: "gemini-2.5-flash-image",
+  IMAGE_MODEL: "gemini-3.1-flash-image-preview",
   CLASSIFIER_THRESHOLD: 0.85,
   MAX_SOL_PER_LAUNCH: 0.05,
   MAX_LAUNCHES_PER_DAY: 3,

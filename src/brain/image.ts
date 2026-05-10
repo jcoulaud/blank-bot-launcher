@@ -14,33 +14,44 @@ const MAX_DOWNLOAD_BYTES = 5 * 1024 * 1024;
 const DOWNLOAD_TIMEOUT_MS = 30_000;
 const SAFE_FALLBACK_IMAGE_STYLE =
   "safe abstract token-avatar icon, one distinctive non-human subject or symbolic object, strong silhouette, simple high-contrast background, no public figures, no real people, no copyrighted characters, no violence, no political symbols";
-const CRYPTO_NATIVE_IMAGE_RULES =
-  "Make the visual language crypto-native and trench-native: raw meme edit, sticker, reaction persona, degen artifact, lore object, rough sketch, pixel item, ugly-funny emblem, or cursed-clean 3D object when it fits the tweet. Avoid stale bull-market cliches unless the tweet itself specifically demands them: rockets, moons, laser eyes, diamond hands, coin piles, Lambos, WAGMI banners, glossy token logos, floating chrome brains, neural-net diagrams, and generic cyber circuit boards.";
-const FRAMING_RULES =
-  "OUTPUT FORMAT: a square 1:1 memecoin token avatar designed to stay recognizable at 32x32 pixels in token lists and wallet UIs. Composition: ONE main subject only, centered, occupying 70-90% of the canvas, with a strong readable silhouette. The style can be photographic, 3D, graphic, pixel, surreal, painterly, or drawn when requested. Background: simple, high-contrast, edge-to-edge, and subordinate to the subject; no busy scenery or multi-object scenes. The image MUST NOT contain ANY of: panels, comic gutters, frame lines, outer borders, mattes, vignettes, letterbox bars, padding, margins, caption strips, banner ribbons, title cards, name plates, speech bubbles, watermarks, signatures, logos, words, letters, numbers, or any kind of writing, lettering, or text whatsoever, anywhere in the image, in any language, including stylized graffiti or background text.";
+const TRENCHES_RULES = `Token avatar lives in Solana memecoin culture (r/SolanaMemeCoins, pump.fun, Crypto Twitter). Core principle: pick a recognizable cultural anchor (meme character, film/TV scene, classical art, retro-game sprite, brand, animal-token archetype) and add the tweet's specific twist.
+
+When the imagePrompt names a wojak-family character (wojak/feels-guy, brainlet, doomer, bloomer, zoomer, boomer, trad, chad, soyjak, NPC, apu, pepe, schizo, yes-chad/nordic-gamer), reproduce the canonical 4chan/Reddit template: rough hand-drawn black ink line (irregular, not vector-clean), full Wojak face features (prominent forehead, defined nose with nostril-shadow, full cheeks/chin/neck, bare shoulders), white face fill, plain white background, scribbled cross-hatch shading where the canonical meme has it. Brainlet specifically: full Wojak head with two black-dot pupils set wide apart, asymmetric crooked smug grin, optional open-skull edit at top — never a clean cartoon bowl with eyes. GigaChad is rendered as B&W photoreal extreme-jawline portrait.
+
+Avoid generic AI concept art: chrome brains, neural-net diagrams, cyber circuit boards, glowing token logos, rockets/moons/laser-eyes/diamond-hands/coin-piles/Lambos/WAGMI banners, "trending on artstation" polish, cinematic Octane/Unreal renders. Polish is fine only when it IS the cultural anchor (a real Renaissance statue, a Matrix-grade film still, an anime cel) — then add the trenches twist on top.`;
+
+const FRAMING_RULES = `Square 1:1 token avatar, recognizable at 32-64px in token lists. One main subject (the cultural anchor) centered, 60-90% of the canvas, strong silhouette. Plain edge-to-edge background by default; scene backgrounds allowed only when part of the anchor (Matrix void, retro-game pixel scene, sticker-collage with a few elements that reinforce the joke). Never AI-default cyber/circuit/neon-corridor backgrounds.
+
+Forbidden: panels, comic gutters, frame lines, borders, mattes, vignettes, letterbox bars, caption strips (no Impact-font top/bottom-text captions), banner ribbons, title cards, name plates, speech bubbles, watermarks, signatures, logos, the token's ticker/symbol, "$"-prefixed text, multiple text elements, decorative branding text.
+
+Text exception: when the imagePrompt explicitly asks for joke-text on a single in-scene physical element (sign, banner, license plate, tombstone, hat patch, billboard) AND that text IS the punchline, render it — ≤3 words, ≤12 characters, on that one element only, spelled cleanly, reading as a real object inside the world rather than a meme caption.`;
+
 const IMAGE_STYLE_PROMPTS: Record<ImageStyle, string> = {
   "meme-character":
-    "internet meme character avatar: simplified expressive character or mascot, bold readable shapes, cartoon treatment is allowed only when the concept calls for a character",
+    "Wojak-family character drawn in canonical 4chan template — rough hand-drawn black ink line, full Wojak face features (prominent forehead, defined nose with nostril-shadow, full cheeks/chin/neck, bare shoulders), white face fill, plain white background, scribbled cross-hatch shading where the canonical has it. Pick from wojak/feels-guy, brainlet, apu, doomer, bloomer, zoomer, boomer, trad, chad, soyjak, NPC, schizo, pepe, yes-chad/nordic-gamer; GigaChad as B&W photoreal extreme-jawline portrait. Brainlet has dot-pupils set wide apart and an asymmetric crooked smug grin, never a clean circular bowl. Allowed: one in-scene prop or sign that carries the joke.",
   "reaction-face":
-    "emotion-forward face or mask close-up: one expression fills the frame, rendered as sketch, paint, plastic, or graphic art as fits the joke",
+    "Named meme-face close-up where the expression IS the joke (wojak shock, brainlet smug, doomer despair, bloomer hopeful, chad approval, apu sad, soyjak open-mouth shock; GigaChad as B&W photoreal portrait). Canonical 4chan template: rough hand-drawn ink line, white face, plain white background, scribbled cross-hatch shading where canonical has it.",
   "graphic-emblem":
-    "bold graphic emblem: screenprint/vector/poster language, sharp silhouette, limited palette, logo-like clarity without text",
+    "Screenprint/sticker-pack emblem: hard flat color blocks, no gradients, sticker-cut silhouette. BOME/SLERF/MEW energy. One subject, plain background.",
   "object-icon":
-    "single tangible object or symbolic prop: material detail, strong lighting, no face unless the tweet specifically needs one",
+    "Single tangible object as the cultural anchor (Tamagotchi, Casio, syringe, tombstone, etc.) plus the tweet's twist. Hand-drawn line, sticker, or amateur 3D. No face unless the tweet calls for one.",
   "studio-photo":
-    "photoreal studio avatar: macro/product-photo lighting, clean backdrop, crisp material texture, realistic shadows",
+    "Ironic photoreal phone-camera shot of a mundane real-world object as the cultural anchor (beat-up Casio, banana on a counter, brick, bodega energy drink). Cheap-product-photo polish, never studio glamour.",
   "surreal-icon":
-    "surreal conceptual icon: one impossible object or creature that visualizes the tweet's punchline, clean silhouette, dreamlike but not busy",
+    "One impossible object or creature visualizing the punchline as a single subject, drawn as sticker, illustration, or lo-fi 3D. Plain background.",
   "pixel-icon":
-    "crisp pixel-art avatar: chunky pixels, readable silhouette, limited palette, modern game-item clarity",
+    "Retro-game pixel sprite: chunky 8/16-bit pixels, NES/SNES/GBA palette. Small in-game scene background allowed when it reinforces the anchor.",
   "3d-avatar":
-    "3D collectible avatar: toy-like or clay/rendered object, simple lighting, tactile material, strong silhouette",
+    "Amateur Blender or clay-toy render with plastic surfaces and simple shapes. Lo-fi by design, never concept-art polish.",
+  "photo-collage":
+    "High-contrast B&W photo of the cultural anchor (movie still, Renaissance statue, press photo) with saturated neon/sticker overlays carrying the tweet's twist (sunglasses, pills, hats, doodles).",
 };
-const DEFAULT_GENERATED_IMAGE_STYLE: ImageStyle = "graphic-emblem";
+
+const DEFAULT_GENERATED_IMAGE_STYLE: ImageStyle = "meme-character";
 
 export type ImageOptions = {
   apiKey: string;
-  model: string; // e.g. "gemini-2.5-flash-image"
+  model: string;
 };
 
 export type PreparedImage = {
@@ -87,7 +98,7 @@ export async function prepareImage(
       const remixed = await callGeminiImage({
         apiKey: options.apiKey,
         model: options.model,
-        prompt: `Edit this image according to: ${meta.remixInstructions ?? ""}. Keep the source subject recognizable and apply only the requested tweet-specific visual changes. Do not replace the subject with a generic character. Re-render as a custom memecoin token avatar; do not force a cartoon style unless the edit instructions call for one. ${FRAMING_RULES}`,
+        prompt: `Edit this image according to: ${meta.remixInstructions ?? ""}. Keep the source subject recognizable and apply only the requested tweet-specific visual changes. Do not replace the subject with a generic character. Re-render as a custom memecoin token avatar; do not force a cartoon style unless the edit instructions call for one. ${TRENCHES_RULES} ${FRAMING_RULES}`,
         imageInline: { data: original.buffer.toString("base64"), mimeType: original.mimeType },
       });
       log.info({ source: "remix", image_source: primaryImageSource }, "remixed tweet image");
@@ -159,11 +170,11 @@ function buildGeneratedImagePrompt(meta: Metadata): string {
     meta.imagePrompt ??
     `Invent one distinctive visual metaphor for "${meta.name}" (${meta.symbol}) as a token avatar`;
   const style = meta.imageStyle ?? DEFAULT_GENERATED_IMAGE_STYLE;
-  return `Create a custom token avatar for this launch. Token: "${meta.name}" ($${meta.symbol}). Visual concept: ${prompt}. Rendering style: ${IMAGE_STYLE_PROMPTS[style]}. Use details from the tweet rather than a reusable mascot template. Avoid generic crypto imagery and default cartoon faces unless the concept explicitly calls for them. ${CRYPTO_NATIVE_IMAGE_RULES} ${FRAMING_RULES}`;
+  return `Create a custom Solana memecoin token avatar for this launch. Token: "${meta.name}". Visual concept: ${prompt}. Rendering style: ${IMAGE_STYLE_PROMPTS[style]}. Use details from the tweet rather than a reusable mascot template, but anchor on a recognizable thing the audience already knows on sight (meme character, film, classical art, retro game, brand, mascot lineage). The token's ticker MUST NOT appear in the image. ${TRENCHES_RULES} ${FRAMING_RULES}`;
 }
 
 function buildSafeFallbackPrompt(meta: Metadata): string {
-  return `Create a ${SAFE_FALLBACK_IMAGE_STYLE} for a token named "${meta.name}" with ticker ${meta.symbol}. ${CRYPTO_NATIVE_IMAGE_RULES} ${FRAMING_RULES}`;
+  return `Create a ${SAFE_FALLBACK_IMAGE_STYLE} for a token named "${meta.name}". The token's ticker MUST NOT appear in the image. ${TRENCHES_RULES} ${FRAMING_RULES}`;
 }
 
 function normalizeImageMimeType(mimeType: string): string | null {

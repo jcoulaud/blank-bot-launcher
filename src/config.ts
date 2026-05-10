@@ -20,7 +20,7 @@ const envSchema = z.object({
 
   // Optional with defaults
   LLM_MODEL: z.string().default("gemini-2.5-flash"),
-  IMAGE_MODEL: z.string().default("gemini-2.5-flash-image"),
+  IMAGE_MODEL: z.string().default("gemini-3.1-flash-image-preview"),
   CLASSIFIER_THRESHOLD: z.coerce.number().min(0).max(1).default(0.85),
   // Cap minimum is 1000 lamports (1e-6 SOL). Anything smaller is almost
   // certainly a typo (extra zero in the env file) and would make the

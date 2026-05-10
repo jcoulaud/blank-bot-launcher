@@ -143,8 +143,43 @@ describe("buildMetadataPrompt", () => {
     expect(prompt).toContain("artificial general intelligence");
     expect(prompt).toContain('symbol="AGI"');
     expect(prompt).toContain("GENERAL");
-    expect(prompt).toContain("floating chrome brains");
-    expect(prompt).toContain("CT/Pump trenches");
+    expect(prompt).toContain("chrome brains");
+    expect(prompt).toContain("Solana-trenches");
+  });
+
+  it("teaches non-obvious acronym extraction with the AGI brainlet example", () => {
+    const prompt = buildMetadataPrompt({
+      tweet: sampleTweet,
+      classification: sampleClassification,
+    });
+
+    expect(prompt).toContain("autistic genius intelligence");
+    expect(prompt).toContain("initialism-completion");
+    expect(prompt).toContain("BOTTOMLESS PIT");
+    expect(prompt).toContain("brainlet");
+  });
+
+  it("requires cultural anchor + tweet-specific twist for generated images", () => {
+    const prompt = buildMetadataPrompt({
+      tweet: sampleTweet,
+      classification: sampleClassification,
+    });
+
+    expect(prompt).toContain("cultural anchor");
+    expect(prompt).toContain("twist");
+    expect(prompt).toContain("photo-collage");
+    expect(prompt).toContain("Punchline-as-visual-prop");
+  });
+
+  it("documents the joke-text exception and the no-ticker rule", () => {
+    const prompt = buildMetadataPrompt({
+      tweet: sampleTweet,
+      classification: sampleClassification,
+    });
+
+    expect(prompt).toContain("Text exception");
+    expect(prompt).toContain("ticker / symbol MUST NOT appear");
+    expect(prompt).toContain("Impact-font");
   });
 
   it("includes classifier context, quoted text, and style choices", () => {
@@ -170,7 +205,7 @@ describe("buildMetadataPrompt", () => {
     expect(prompt).toContain("Quoted tweet has image: no");
     expect(prompt).toContain("graphic-emblem");
     expect(prompt).toContain("studio-photo");
-    expect(prompt).toContain("Do NOT force BONK/PEPE/Wojak/Doge/Chad");
+    expect(prompt).toContain("do not default to wojak");
   });
 
   it("marks quoted-tweet media as available for metadata image strategy", () => {

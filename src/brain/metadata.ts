@@ -14,6 +14,7 @@ export const IMAGE_STYLES = [
   "surreal-icon",
   "pixel-icon",
   "3d-avatar",
+  "photo-collage",
 ] as const;
 
 export const MetadataSchema = z.object({

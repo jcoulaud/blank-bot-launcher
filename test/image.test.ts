@@ -147,16 +147,16 @@ describe("formatGeminiHttpError", () => {
       error: {
         code: 429,
         message:
-          "You exceeded your current quota, please check your plan and billing details.\n* Quota exceeded for metric: generativelanguage.googleapis.com/generate_content_free_tier_requests, limit: 0, model: gemini-2.5-flash-preview-image\nPlease retry in 10.109036662s.",
+          "You exceeded your current quota, please check your plan and billing details.\n* Quota exceeded for metric: generativelanguage.googleapis.com/generate_content_free_tier_requests, limit: 0, model: gemini-3.1-flash-image-preview\nPlease retry in 10.109036662s.",
         status: "RESOURCE_EXHAUSTED",
       },
     });
-    const out = formatGeminiHttpError(429, body, "gemini-2.5-flash-preview-image");
-    expect(out).toBe("Gemini gemini-2.5-flash-preview-image quota exceeded (retry in 10s)");
+    const out = formatGeminiHttpError(429, body, "gemini-3.1-flash-image-preview");
+    expect(out).toBe("Gemini gemini-3.1-flash-image-preview quota exceeded (retry in 10s)");
   });
 
   it("falls back gracefully when the body is not JSON", () => {
-    const out = formatGeminiHttpError(502, "Bad Gateway", "gemini-2.5-flash-preview-image");
+    const out = formatGeminiHttpError(502, "Bad Gateway", "gemini-3.1-flash-image-preview");
     expect(out).toBe("Gemini image API 502: Bad Gateway");
   });
 
@@ -168,7 +168,7 @@ describe("formatGeminiHttpError", () => {
         message: "Request contains an invalid argument.\nfoo bar\nbaz",
       },
     });
-    const out = formatGeminiHttpError(400, body, "gemini-2.5-flash-preview-image");
+    const out = formatGeminiHttpError(400, body, "gemini-3.1-flash-image-preview");
     expect(out).toBe("Gemini image API INVALID_ARGUMENT: Request contains an invalid argument.");
   });
 

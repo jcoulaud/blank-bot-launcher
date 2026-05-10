@@ -210,11 +210,12 @@ describe("prepareImage dispatch", () => {
     expect(parts.some((p: { inlineData?: unknown }) => p.inlineData)).toBe(false);
     const text = parts.find((p: { text?: string }) => p.text)?.text ?? "";
     expect(text).toContain("single gold doge rocket toy");
-    expect(text).toContain("single tangible object");
+    expect(text).toContain("Single tangible object");
     expect(text).toContain("memecoin token avatar");
-    expect(text).toContain("trench-native");
-    expect(text).toContain("stale bull-market cliches");
-    expect(text).toContain("any kind of writing");
+    expect(text).toContain("Solana memecoin culture");
+    expect(text).toContain("recognizable cultural anchor");
+    expect(text).toContain("ticker MUST NOT appear");
+    expect(text).toContain("no Impact-font top/bottom-text captions");
   });
 
   it("generate strategy uses default prompt when imagePrompt missing", async () => {
@@ -253,8 +254,10 @@ describe("prepareImage dispatch", () => {
     const retryText = retryBody.contents?.[0]?.parts?.[0]?.text ?? "";
     expect(retryText).toContain("safe abstract token-avatar icon");
     expect(retryText).toContain("no public figures");
-    expect(retryText).toContain("trench-native");
-    expect(retryText).toContain("VITALIK");
+    expect(retryText).toContain("Solana memecoin culture");
+    expect(retryText).toContain("Vitalik quote");
+    // Ticker symbol must never reach the image generator's content.
+    expect(retryText).not.toContain("VITALIK");
   });
 
   it("reports no-image Gemini responses as a compact error if the safe fallback also fails", async () => {

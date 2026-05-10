@@ -126,6 +126,10 @@ Examples (study these - they set the bar):
 12) Tweet: "👇🎶🎤" quoting "Why should communism always be lower case? So that it's not capitalized." - has quoted image: no
     => shouldLaunch=false, confidence=0.05, launchableMeme=false, memeSource="none", visualAssessment="none", disqualifiers=["no_self_contained_joke","normal_conversation"]
       reason="the source tweet is only an emoji reaction; the joke belongs to the quoted tweet, so this post did not author a launchable meme"
+
+13) Tweet: "5.5 is an autistic genius with very strange taste in naming" - author: sama - has image: no
+    => shouldLaunch=true, confidence=0.92, launchableMeme=true, memeSource="tweet_text", visualAssessment="none", disqualifiers=[]
+      reason="reframed-acronym pun: 'autistic genius' from an AI-founder talking about a model implies AGI (autistic genius intelligence). The initialism alignment IS the joke; high-signal trenches ticker"
 `.trim();
 
 const METADATA_FEW_SHOT = `
@@ -138,11 +142,14 @@ Worked examples (these reflect the right output shape):
      (no imagePrompt, no remixInstructions)
 
 2) Tweet: "Gad's honest truth" - author: elonmusk - has image: no
-   => name="Gad's honest truth"      # verbatim; the typo "Gad's" (vs "God's") IS the joke, keep it
-      symbol="GAD"                   # the load-bearing word
-      imageStrategy="generate"       # no image to reuse
-      imageStyle="graphic-emblem"
-     imagePrompt="Polished brass academic bust with tiny saint halo and one raised eyebrow, courtroom-truth vibe, teal screenprint background, bold emblem silhouette, no text"
+   => name="Gad's honest truth"      # verbatim; the typo "Gad's" (vs "God's") IS the joke
+      symbol="GAD"
+      imageStrategy="generate"
+      imageStyle="photo-collage"
+     imagePrompt="Anchor: high-contrast B&W photo of a Renaissance marble bust of a serious philosopher.
+                  Twist: cheap neon-pink halo doodle pasted above the head, crooked sticker, and one
+                  small drawn raised eyebrow. Single subject, plain dark background, no caption text,
+                  no banners, no ticker, no signature."
 
 3) Tweet: "communities in control?" - author: pumpfun - has image: yes (meme template)
    => name="communities in control?" # verbatim, KEEP the question mark
@@ -169,58 +176,75 @@ Worked examples (these reflect the right output shape):
 
 6) Tweet: "Trillions" - author: toly - has image: yes (video thumbnail of a guest speaker)
    => name="Trillions"                # one-word verbatim, the whole point IS the one-word hype
-      symbol="TRILLIONS"               # only one word and it IS the ticker
+      symbol="TRILLIONS"
       imageStrategy="generate"         # video thumbnail isn't a meme template; do not reuse
-      imageStyle="reaction-face"       # the meme is awe at a number, not the number itself
-     imagePrompt="Polished chrome shock-mask close-up, eyes blown wide, tiny sweat beads, mouth
-                  agape in FOMO disbelief, electric cyan studio backdrop, one readable face, no text"
-   # WRONG approach for this tweet: "river of gold coins flowing through a neon circuit board" -
-   # that illustrates what the tweet REACTS to, not the reaction. Generic crypto stock art.
+      imageStyle="reaction-face"
+     imagePrompt="Anchor: classic wojak shock-face, hand-drawn rough meme line, eyes blown wide,
+                  mouth agape, beads of sweat. B&W with one pink cheek-shading. Twist: tiny green
+                  candle reflection in each wide eye. Plain white background. One face only, no
+                  caption, no banner, no ticker."
+   # Illustrate the REACTION (wojak shock meme), not what the tweet reacts TO (gold/coins).
 
 7) Tweet: "stay for the best model" - author: sama - has image: no
    => name="stay for the best model"
       symbol="MODEL"
       imageStrategy="generate"
-      imageStyle="object-icon"
-     imagePrompt="Matte black neural-network trophy shaped like a chess king, glowing model-core
-                  facets, calm premium studio lighting, simple ivory backdrop, no text"
-   # WRONG approach: "split-panel comic with THE PAIN vs THE QUALITY captions" - bakes in
-   # panel borders and on-image text; produces an editorial cartoon, not a token avatar.
+      imageStyle="photo-collage"
+     imagePrompt="Anchor: high-contrast B&W movie still of Morpheus from The Matrix holding out two
+                  hands palms-up. Twist: in his left palm a glossy red pill with one tiny hand-drawn
+                  cardboard sign in front of it bearing the joke-text 'BEST' in shaky marker caps; in
+                  his right palm a smaller dim grey pill, no other markings. Pure black background,
+                  no Impact-font caption, no top/bottom-text bars, no ticker, no logos."
+   # 'BEST' on a tiny in-scene sign uses the joke-text exception: one physical sign, ≤3 words,
+   # is the punchline - never a meme caption laid over the image.
 
 8) Tweet: "Real superhero shit." - author: toly - has image: no
    => name="Real superhero shit."
       symbol="SUPERHERO"
       imageStrategy="generate"
-      imageStyle="3d-avatar"
-     imagePrompt="Single scuffed superhero mask as a tactile 3D toy, heroic brow, glossy red shell,
-                  gold eye slits, clean blue studio backdrop, centered avatar, no text"
-   # WRONG approach: "muscled superhero in front of treasure city with money bags and a name
-   # banner at the bottom" - that's a comic-book cover illustration; at 32px it's a brown blob.
+      imageStyle="pixel-icon"
+     imagePrompt="Anchor: 16-bit SNES-era superhero sprite, scuffed red mask and cape, chunky pixels
+                  with limited palette. Twist: holding up one tiny pixel coffee mug like an off-duty
+                  hero. Tiny in-game alley pixel scene at dawn light behind. No text, no logo, no
+                  ticker."
 
-9) Tweet: "artificial general intelligence" - author: ai-founder - has image: no
-   => name="artificial general intelligence"
-      symbol="AGI"                    # acronym is the entire AI/meme hook; "$GENERAL" is too generic
+9) Tweet: "5.5 is an autistic genius with very strange taste in naming" - author: sama (AI-founder; 5.5 = an AI model) - has image: no
+   => name="autistic genius intelligence"   # initialism-completion: the tweet provides "autistic
+                                             # genius"; the AI-model topic makes the third word
+                                             # "intelligence" obvious. AGI is the entire trade.
+      symbol="AGI"                            # not GENIUS or AUTISTIC; those miss the joke
       imageStrategy="generate"
       imageStyle="meme-character"
-     imagePrompt="Black-and-white robot wojak bust with smug side-eye and exposed neck wires,
-                  rough viral sketch style, stark white background, one meme-native character, no text"
-   # WRONG approach: "glowing chrome brain with circuit-board crystals" - generic AI stock art,
-   # not a character people recognize and not the AGI pun.
+     imagePrompt="Anchor: canonical Brainlet Wojak. Full Wojak head and bare-shoulders bust with
+                  prominent forehead, defined nose with a small nostril shadow line, full cheeks,
+                  defined chin, visible neck and shoulders. Two small black-dot pupils set wide
+                  apart, asymmetric crooked smug grin that tilts up on one side. Top of the skull
+                  cut open horizontally exposing a deep dark hollow brain cavity. Rough hand-drawn
+                  black ink line (not thin vector), scribbled cross-hatch shading on the neck,
+                  jawline, and chest/torso. White face fill, plain white background reaching every
+                  edge. Twist: one wooden cardboard sign on a stick poking up out of the open
+                  skull, the sign bears the joke-text 'BOTTOMLESS PIT' in shaky hand-lettered
+                  marker caps. Single character, no border, no Impact-font captions, no artist
+                  signature, no ticker. The head reads as a real Wojak with face features, never
+                  a simplified circular bowl with eyes drawn on the lower curve."
 
-Notice what these have in common:
-- Names come from the tweet itself, not "{Author}'s {topic}"
-- Punctuation and casing are preserved when they carry meaning
-- Symbol is usually one word from the chosen phrase, the one that vibes; when the phrase forms a
-  high-signal acronym/initialism people already trade on (AGI, AI, LLM, NPC, NFT, DAO, GPU, UFO),
-  use that instead of a generic component word
-- Source and quoted images matter: reuse if already final, remix if the tweet's joke transforms
-  the visible subject, generate only when no useful image exists
-- "generate" prompts encode the SPECIFIC joke and feel crypto-native/trench-native, not
-  "cartoon meme illustration" or polished AI concept art
-- Avoid stale bull-market cliches: rockets, moons, laser eyes, diamond hands, coin piles, Lambos,
-  WAGMI banners, generic cyber brains, and clean corporate mascot/logo energy
-- "imageStyle" chooses the rendering language; "imagePrompt" chooses the tweet-specific subject,
-  material, mood, and background
+10) Tweet: "watch guy" - author: anyone - has image: no
+    => name="watch guy"
+       symbol="WATCH"
+       imageStrategy="generate"
+       imageStyle="studio-photo"
+      imagePrompt="Anchor: a single beat-up plastic Casio F-91W on a scuffed white kitchen counter,
+                   shot on a cheap phone camera under uneven kitchen overhead light. Twist: faintly
+                   visible coffee ring under the strap. Deadpan, no Rolex, no luxury polish, no
+                   logos, no text overlays, no ticker."
+    # Trenches "watch" is the cheap nostalgic version, deadpan, never glamour.
+
+Patterns:
+- Names come from the tweet itself, not "{Author}'s {topic}". Preserve punctuation/casing when it carries meaning.
+- Symbol is the load-bearing word from the name. When the words spell a high-signal initialism the trenches already trade on (AGI, AI, LLM, NPC, NFT, DAO, GPU, UFO), use it - including non-obvious cases (autistic-genius-intelligence -> AGI).
+- For images: reuse if final, remix if the tweet's joke transforms the visible subject, generate only when no useful image exists.
+- Every "generate" imagePrompt names a cultural anchor and a tweet-specific twist. No anchor = bad prompt.
+- imageStyle chooses the rendering language; imagePrompt chooses the anchor, twist, and any rules-allowed joke-text.
 `.trim();
 
 export function buildClassifierPrompt(tweet: Tweet): string {
@@ -245,6 +269,7 @@ LAUNCH signals (look for these):
 - Absurdism, dark humor, or self-deprecation that lands ("expert in federal non-profit law" + apu)
 - An attached image that is itself a meme template (troll-face, pepe, apu, doge, reaction shots)
 - Rhetorical questions or one-liners that read like a tweet someone would screenshot
+- Reframed-acronym pun: a sequence of words whose initials spell a known initialism the trenches already trade on (AGI, AI, LLM, NPC, NFT, DAO, GPU, UFO, IQ, ETF, IPO, CPU, CTO, ZK, API). When the words don't normally form that initialism, the alignment IS the joke ("autistic genius intelligence" -> AGI). High-confidence launch signal.
 
 REJECT signals (any of these => low confidence, REJECT):
 - Earnest announcements (fundraises, hires, product launches, partnerships)
@@ -346,6 +371,13 @@ How to choose the name:
 5. Only invent a name as a last resort when no clean phrase exists AND the meme is purely visual. Even then, lean on language from the tweet.
 6. Do NOT "correct" typos or unusual spellings. If the tweet says "Gad's" instead of "God's", that misspelling IS the meme; keep it.
 
+INITIALISM-COMPLETION EXCEPTION (overrides "verbatim" when it applies):
+When the tweet contains a sequence of 2-or-more adjacent words whose initials, plus ONE obvious missing word implied by the tweet's topic, would form a known high-signal initialism the trenches already trade on (AGI, AI, LLM, NPC, NFT, DAO, ETF, GPU, UFO, IQ, IPO, CPU, CTO, ZK, API), you SHOULD complete the phrase. Add the one obvious implied word so the resulting name's initialism IS the punchline, and use that initialism as the symbol.
+- The implied word must be the obvious one given the tweet's subject. If the tweet is about an AI model and the present words are "autistic genius", the implied missing word is "intelligence" -> "autistic genius intelligence" -> AGI. If the tweet is about a character and the present words are "non playable", the implied missing word is "character" -> "non playable character" -> NPC. Do not stretch.
+- Do NOT invent a word that is not strongly implied by the tweet's topic; if the inference is shaky, fall back to verbatim.
+- The completed initialism is the entire trade. Settling for a single component word like GENIUS, MODEL, or PLAYABLE misses the whole point of the tweet.
+- This exception only applies when the result spells one of the recognized initialisms above (or a clear close cousin people already trade on); do not invent acronyms.
+
 How to choose the symbol:
 - Pick the single most ticker-worthy word from the chosen name - the word a crypto-native would actually tweet "$XXX" about.
 - Usually a noun or verb that carries the punch (SIZE, CONTROL, EXPERT, DOGE, GAD, TRUTH).
@@ -383,66 +415,67 @@ Image strategy - this is a strict decision tree, follow it in order:
 
   Step 4 (no image): imageStrategy="generate".
 
-    Frame this as a crypto-native TOKEN AVATAR, not a captioned illustration or corporate concept
-    image.
-    The output is shown at 32-64px on token lists (dexscreener, Jupiter, wallets), so it must be
-    instantly readable as a small square avatar. It should feel native to CT/Pump trenches: raw
-    meme edit, sticker, reaction persona, degen artifact, lore object, rough sketch, pixel item,
-    ugly-funny emblem, or cursed-clean 3D object when that fits the tweet.
-    Do NOT force BONK/PEPE/Wojak/Doge/Chad just because this is a memecoin. Use those archetypes
-    only when the tweet's joke actually points there.
-    Use the style that best fits the tweet: photoreal object, 3D toy, graphic emblem, pixel icon,
-    surreal symbol, painterly face, or a meme character when the tweet actually calls for one.
-    ONE subject only, centered, filling 70-90% of the canvas, with a clear silhouette and a simple
-    high-contrast background. No environments, no busy scenes, no editorial/cartoon panels.
+    Frame the output as a Solana-trenches token avatar (audience: r/SolanaMemeCoins / pump.fun / Crypto Twitter), seen at 32-64px in token lists - never as captioned illustration, editorial cartoon, or corporate concept image.
 
-    imagePrompt MUST encode the SPECIFIC joke of THIS tweet via the chosen subject:
-    references, objects, materials, character archetypes, wordplay made visual, or the punchline
-    of the meme. It should be specific enough that it would not fit another launch unchanged.
-    BAD: "cartoon meme illustration of {name}, bold colors"  # generic
-    BAD: "Pepe/Wojak/Doge/Chad face on a flat background" when the tweet does not ask for it.
-    BAD: rockets, moons, laser eyes, diamond hands, coin piles, Lambos, WAGMI banners, glossy
-         token logos, floating chrome brains, neural-net diagrams, or generic cyber circuit boards.
-    GOOD: "Polished chrome shock-mask close-up, eyes blown wide, tiny sweat beads,
-          electric cyan studio backdrop"  # encodes joke + avatar framing
+    Core rule: pick a recognizable cultural anchor + a tweet-specific twist. The anchor is something the audience knows on sight; the twist is what THIS tweet adds. Without a named anchor the renderer defaults to AI concept art and the image is dead on arrival.
 
-    Keep it under ~60 words. Include: concrete subject + visual gag + rendering treatment +
-    simple background. Do not leave the renderer to choose a generic cartoon look.
+    Match the anchor family to the tweet:
+    - Cope / despair / smug stupidity / identity / "I am" tweets => wojak family (brainlet, doomer, bloomer, zoomer, boomer, soyjak, NPC, chad, apu, etc.)
+    - Reaction one-liners ("Few.", "Cooked", "Trillions", "It's so over") => wojak-family reaction face OR a film-still reaction (Sopranos look, Anakin "I'm sorry")
+    - Movie / TV / anime quote or reference => photo-collage of that scene with the tweet's twist as overlaid sticker/object (Matrix, Sopranos, LOTR, Star Wars, Office Space, Akira, GTA)
+    - Timeless / refined phrasing with degen subtext => classical art photo-collage (Renaissance bust, Greek statue, famous painting) with cheap modern sticker overlay
+    - Game / retro / internet-native ("respawn", "boss fight", "high score") => pixel-icon retro sprite with NES/SNES palette
+    - Everyday object / luxury-irony ("watch guy", "dad shit") => studio-photo of a cheap real object (Casio, Nokia 3310, bodega energy drink, brick) shot deadpan on a phone camera
+    - Brand / political / nostalgia tech (MAGA, Pit Vipers, Yeezys, Clippy, Tamagotchi) => brand-as-emblem (graphic-emblem) or brand pasted onto an unexpected anchor (photo-collage)
+    - Solana-native mascot lore / pump.fun / pill-brain alien => meme-character or 3d-avatar with consistent mascot traits
+    - Animal-token archetype (shiba, cat, frog, goat) => crude phone-camera animal photo OR drawn-line cousin of the animal
+    - When in doubt, pick what the audience would post first under this tweet on CT. The more surprising fit beats the obvious one (Renaissance statue beats wojak for a polished-tone joke).
 
-    Anti-literal rule (CRITICAL):
-    Do NOT illustrate the topic the tweet is reacting TO. Illustrate the REACTION itself.
-    A one-word or short reaction tweet ("Trillions", "Few.", "Bullish", "Cooked", "It's so over")
-    is meme energy directed at something else; the meme is the cultural shorthand, not the subject.
-    BAD for "Trillions": "river of gold coins flowing through a circuit board"
-    GOOD for "Trillions": "Chrome shock-mask close-up, mouth agape, sweat beads, pure FOMO awe,
-      electric cyan studio backdrop, one readable face."
-    You MAY use a SINGLE recognizable meme character/archetype (Wojak, Pepe, Apu, Doge, Chad,
-    Brainlet, etc.) when the tweet's humor is specifically a reaction-face meme. Otherwise,
-    prefer a more specific object, emblem, material, creature, or symbolic avatar.
-    Avoid: landscapes, environments, scenes with multiple objects, "river of X" compositions,
-    cityscapes, treasure piles, circuit-board / cyberspace backgrounds, money bags, charts —
-    they read as stock crypto illustration, not as token icons.
-    For AI/intelligence/genius memes, the same rule applies: if the phrase is about a persona or
-    archetype, make the persona/reaction the subject; use an AI object only when the tweet itself
-    is about the object.
+    Wojak family is one option among many; do not default to wojak. When the imagePrompt does pick a wojak-family character, copy its canonical visual signature into the imagePrompt - the named meme alone is not enough; renderers soften it into clean cartoon unless the features are stated. Family base: bald human head with prominent forehead/brow, defined nose with nostril shadow, full cheeks/chin, visible neck and bare shoulders, rough hand-drawn black ink line (irregular, not vector), white face, plain white background, scribbled cross-hatch shading on neck/jaw/torso where the canonical has it. GigaChad is the exception - B&W photoreal extreme-jawline portrait.
+    - Wojak / Feels Guy: hollow open-circle pupils set wide apart, small downturned flat mouth, sad expression
+    - Brainlet: two black-dot pupils set wide apart, asymmetric crooked smug grin tilting up on one side; optional open-skull edit at top exposing a dark hollow brain cavity. The head is a full Wojak head with face, never a simplified bowl with eyes drawn on the lower curve.
+    - Doomer: hood pulled up, sunken hollow eye sockets, lit cigarette between thin flat lips
+    - Bloomer: doomer head + hood with pastel-pink shaded cheeks and small genuine closed-mouth smile; optional flower or sun
+    - Zoomer: backwards or sideways cap, oversized AirPods, holding an energy drink, jittery hyperactive smile
+    - Boomer: rounded older head, cap or visor, plain shirt, blank pleased expression
+    - Trad: medieval cape and crown, stoic profile pose, optional sword
+    - Chad: muscled square-jawed bare-shouldered bust, slightly smug, three-quarter view
+    - GigaChad: B&W photoreal heavily-airbrushed extreme-jawline portrait, deep dramatic shadows
+    - Yes Chad / Nordic Gamer: blonde long hair, blonde beard, blue-eyed Nordic profile, confident closed-mouth nod
+    - Soyjak: open soy-mouth shock face (jaw dropped wide), round glasses, scraggly beard, pointing finger
+    - NPC: featureless flat-gray Subway-sign-style head, single straight line for mouth
+    - Schizo: frantic scribbled multiple eyes, wild hair, frenzied energy
+    - Apu (apu apustaja): chubby sad green frog cousin of pepe, helping pose
+    - Pepe: classic green frog, smug or sad variants
 
-    HARD RULES for every imagePrompt (state these in the prompt itself, not just here):
-    - NO text, words, letters, numbers, captions, banners, title strips, or speech bubbles
-      anywhere in the image. Not stylized, not in a corner, not even one letter.
-    - NO border, frame, panel, gutter, matte, vignette, or letterbox bar.
-    - NO comic-book panel layouts, NO split panels, NO before/after compositions.
-    - NO faux-UI / faux-screenshot / faux-news compositions.
-    - The background must reach every pixel of every edge.
+    Anti-literal rule: illustrate the REACTION, not what the tweet reacts TO. "Trillions" gets a wojak shock-face with green-candle reflections, not a river of gold coins.
+
+    Avoid generic AI concept art: chrome brains, neural-net diagrams, cyber circuit boards, glowing token logos, rockets/moons/laser-eyes/diamond-hands/coin-piles/Lambos/WAGMI banners, "Octane render" / "trending on artstation" polish.
+
+    Punchline-as-visual-prop: for short reaction or identity phrases, one character + one in-scene physical prop or sign that IS the joke (BOTTOMLESS-PIT brainlet, AGI).
+
+    imagePrompt shape: "Anchor: <recognizable anchor>. Twist: <tweet-specific change>. <rendering + background + rules>." Specific enough that it would not fit another launch unchanged. Under ~80 words.
+
+    Hard rules for every imagePrompt (state them in the prompt itself, not just here):
+    - The token's ticker / symbol MUST NOT appear in the image. No "$XXX", no XXX, ever.
+    - No Impact-font top-text/bottom-text meme captions.
+    - No border, frame, panel, gutter, matte, vignette, letterbox bar, watermark, signature, logo.
+    - No comic-book panel layouts, split panels, before/after compositions, faux-UI/faux-screenshot/faux-news compositions.
+    - The background reaches every pixel of every edge.
+
+    Text exception: no text by default. The single allowed exception is when the tweet's punchline IS text that must appear on a single in-scene physical element (sign held by a character, banner, license plate, tombstone, hat patch, billboard). Name exactly one such element and the short joke-text on it (≤3 words, ≤12 characters). The text reads as a real object in the world, not a meme caption. Never place the ticker, "$"-prefix, brand text not present in the anchor, multiple text elements, or decorative labels. Image generators misspell text; keep it short and isolated. When in doubt, no text.
 
     imageStyle MUST choose exactly one rendering style:
-    - "meme-character": simplified expressive character/mascot. Use sparingly, only when the tweet calls for a character or classic meme face.
-    - "reaction-face": one face, mask, or head close-up where the expression IS the meme ("Trillions", "Few.", "Cooked").
-    - "graphic-emblem": poster/screenprint/vector emblem for punchy phrases, wordplay, and iconic one-liners.
-    - "object-icon": one tangible object or symbolic prop with material detail.
-    - "studio-photo": photoreal macro/product-photo token avatar for physical objects, luxury, seriousness, or irony.
-    - "surreal-icon": one impossible object/creature that visualizes the punchline without becoming a scene.
-    - "pixel-icon": crisp pixel-art avatar when the joke has game/internet/retro energy.
-    - "3d-avatar": toy-like/clay/rendered object or character when tactile 3D makes the idea funnier.
+    - "meme-character": named wojak-family character or mascot in the same lineage; rough hand-drawn line, plain background; one in-scene prop or sign allowed.
+    - "reaction-face": single meme-face close-up where the expression IS the joke (wojak shock, brainlet smug, doomer despair, chad approval, apu sad, gigachad jaw).
+    - "graphic-emblem": screenprint/sticker-pack emblem, hard flat color blocks, no gradients (BOME/SLERF/MEW energy).
+    - "object-icon": single tangible object as the anchor (Tamagotchi, Casio, syringe, tombstone) plus the twist.
+    - "studio-photo": ironic phone-camera shot of a mundane real-world object as the anchor; cheap-product-photo polish, never glamour macro.
+    - "surreal-icon": one impossible object/creature visualizing the punchline as a single subject.
+    - "pixel-icon": retro-game pixel sprite (8/16-bit, NES/SNES/GBA palette); small in-game scene background allowed.
+    - "3d-avatar": amateur Blender or clay-toy 3D with plastic surfaces, intentionally lo-fi.
+    - "photo-collage": high-contrast B&W photo of the anchor (movie still, Renaissance statue, press photo) with saturated neon/sticker graphic overlays carrying the twist
+      (401(k)-Morpheus / Pit-Viper-cherub energy).
 
 HARD constraints (the code validates these; failing them retries with the failure reason):
 - name: <=32 bytes after NFKC normalization. No zero-width or RTL characters. For ASCII, count every character including spaces and punctuation.
