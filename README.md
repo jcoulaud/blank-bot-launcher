@@ -8,6 +8,8 @@ uploads both to IPFS through Pinata, then calls `blank.launch.create()`.
 This is example code. Live mode spends real SOL from a hot wallet. Use a new
 wallet, fund it lightly, and run in dry mode first.
 
+https://github.com/user-attachments/assets/60404e3b-eb74-4b27-b9ef-ae4eaf5f5c8d
+
 ## What you learn
 
 - How to build a Blank SDK client and wallet adapter.
