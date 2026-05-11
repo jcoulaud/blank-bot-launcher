@@ -129,14 +129,6 @@ export function validateLaunchImage(image: PreparedImage): ImageValidation {
   const dimensions = readImageDimensions(image.buffer, mimeType);
   if (!dimensions) return { ok: false, reason: `could not read ${mimeType} image dimensions` };
 
-  const ratio = dimensions.width / dimensions.height;
-  if (ratio < 0.95 || ratio > 1.05) {
-    return {
-      ok: false,
-      reason: `image must be square-ish for token icon use; got ${dimensions.width}x${dimensions.height}`,
-    };
-  }
-
   return { ok: true, mimeType, width: dimensions.width, height: dimensions.height };
 }
 

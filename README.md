@@ -154,7 +154,7 @@ disposable.
 - Circuit breakers pause live queue processing after repeated provider, IPFS,
   launch, or X spend failures. Pending tweets stay queued.
 - Images are validated before IPFS upload for supported MIME type, readable
-  dimensions, size cap, and square-ish token-icon framing.
+  dimensions, and size cap.
 
 ## Crash recovery
 

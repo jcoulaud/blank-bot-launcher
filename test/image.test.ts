@@ -10,10 +10,18 @@ const VALID_1X1_PNG = Buffer.from(
   "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/p9sAAAAASUVORK5CYII=",
   "base64",
 );
-const VALID_10X10_JPEG = Buffer.from([
-  0xff, 0xd8, 0xff, 0xe0, 0x00, 0x04, 0x00, 0x00, 0xff, 0xc0, 0x00, 0x0b, 0x08, 0x00, 0x0a, 0x00,
-  0x0a, 0x01, 0x01, 0x11, 0x00, 0xff, 0xd9,
-]);
+const VALID_10X10_JPEG = jpegWithDimensions(10, 10);
+const VALID_1200X900_JPEG = jpegWithDimensions(1200, 900);
+
+function jpegWithDimensions(width: number, height: number): Buffer {
+  const buffer = Buffer.from([
+    0xff, 0xd8, 0xff, 0xe0, 0x00, 0x04, 0x00, 0x00, 0xff, 0xc0, 0x00, 0x0b, 0x08, 0x00, 0x00, 0x00,
+    0x00, 0x01, 0x01, 0x11, 0x00, 0xff, 0xd9,
+  ]);
+  buffer.writeUInt16BE(height, 13);
+  buffer.writeUInt16BE(width, 15);
+  return buffer;
+}
 
 function mockFetchOnce(init: {
   status?: number;
@@ -88,16 +96,12 @@ describe("downloadCappedImage", () => {
   });
 
   it("aborts mid-stream if running byte count exceeds cap", async () => {
-    // Lying Content-Length: declared 1KB, sends 6MB
     const big = new Uint8Array(6 * 1024 * 1024).fill(0x55);
     mockFetchOnce({
       contentType: "image/jpeg",
       contentLength: "1024",
       bodyChunks: [big],
     });
-    // Note: this case is also caught by the Content-Length pre-check (declared <= cap so passes
-    // initial check, then stream actually delivers more bytes than declared). We expect either
-    // the pre-check passes and the stream-cap triggers, OR the pre-check rejects. Both are valid.
     await expect(downloadCappedImage("https://pbs.twimg.com/media/lie")).rejects.toThrow();
   });
 
@@ -128,6 +132,16 @@ describe("validateLaunchImage", () => {
         source: "generated",
       }),
     ).toEqual({ ok: true, mimeType: "image/jpeg", width: 10, height: 10 });
+  });
+
+  it("accepts readable non-square image dimensions", () => {
+    expect(
+      validateLaunchImage({
+        buffer: VALID_1200X900_JPEG,
+        mimeType: "image/jpeg",
+        source: "generated",
+      }),
+    ).toEqual({ ok: true, mimeType: "image/jpeg", width: 1200, height: 900 });
   });
 
   it("rejects buffers whose dimensions cannot be read", () => {
