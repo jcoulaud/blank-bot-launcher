@@ -1,7 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
   formatReason,
-  formatSolThreeDecimals,
   formatSolTwoDecimals,
   formatUsd,
   pillClass,
@@ -93,26 +92,20 @@ describe("formatUsd", () => {
 });
 
 describe("formatSolTwoDecimals", () => {
-  it("always renders recent launch costs with two decimal places", () => {
+  it("always renders SOL amounts with two decimal places", () => {
     expect(formatSolTwoDecimals(1)).toBe("1.00");
     expect(formatSolTwoDecimals(0.0123)).toBe("0.01");
+    expect(formatSolTwoDecimals(0.121)).toBe("0.12");
+    expect(formatSolTwoDecimals(0.06)).toBe("0.06");
     expect(formatSolTwoDecimals(0)).toBe("0.00");
-  });
-});
-
-describe("formatSolThreeDecimals", () => {
-  it("renders dashboard SOL spent values with three decimal places", () => {
-    expect(formatSolThreeDecimals(1)).toBe("1.000");
-    expect(formatSolThreeDecimals(0.094613495)).toBe("0.095");
-    expect(formatSolThreeDecimals(0)).toBe("0.000");
   });
 });
 
 describe("renderHome", () => {
   it("uses persisted total metrics as dashboard headlines and keeps today as detail", () => {
     const html = renderHome({
-      todayCounter: { date: "2026-05-06", launches_count: 1, sol_spent: 0.01 },
-      launchTotals: { launches_count: 4, sol_spent: 0.09 },
+      todayCounter: { date: "2026-05-06", launches_count: 1, sol_spent: 0.06 },
+      launchTotals: { launches_count: 4, sol_spent: 0.121 },
       xApiUsage: {
         date: "2026-05-06",
         today: { resources: 2, cost_usd: 0.015, by_type: [] },
@@ -126,7 +119,20 @@ describe("renderHome", () => {
       launchesPage: 1,
       launchesPageSize: 20,
       launchesTotal: 0,
-      telemetry: emptyTelemetry,
+      telemetry: {
+        ...emptyTelemetry,
+        stageMetrics: [
+          {
+            stage: "classify",
+            runs: 3,
+            errors: 1,
+            avg_duration_ms: 12.4,
+            max_duration_ms: 44.8,
+          },
+        ],
+        decisionCounts: [{ decision: "classifier-test-decision", count: 2 }],
+        scoreBuckets: [{ bucket: "classifier-score-bucket", count: 2 }],
+      },
       balanceSol: 1.23,
       walletPubkey: "Wallet111111111111111111111111111111111",
     });
@@ -135,10 +141,21 @@ describe("renderHome", () => {
     expect(html).toContain('<p class="stat-value">4</p>');
     expect(html).toContain("today 1 on 2026-05-06");
     expect(html).toContain("SOL spent total");
-    expect(html).toContain('<p class="stat-value">0.090</p>');
-    expect(html).toContain("today 0.010 SOL");
+    expect(html).toContain('<p class="stat-value">0.12</p>');
+    expect(html).toContain("today 0.06 SOL");
     expect(html).toContain("X API total");
     expect(html).toContain('<p class="stat-value">$0.055</p>');
     expect(html).toContain("8 reads; today $0.015");
+    expect(html).not.toContain("Pipeline health");
+    expect(html).not.toContain('id="pipeline"');
+    expect(html).not.toContain("Classifier telemetry");
+    expect(html).not.toContain('id="calibration"');
+    expect(html).not.toContain("classifier-test-decision");
+    expect(html).not.toContain("classifier-score-bucket");
+
+    const sectionHeadingIds = [...html.matchAll(/<h2 class="h2" id="([^"]+)"/g)].map(
+      (match) => match[1],
+    );
+    expect(sectionHeadingIds[sectionHeadingIds.length - 1]).toBe("errors");
   });
 });
