@@ -122,9 +122,6 @@ export function renderHome(args: {
     )
     .join("");
   const xApiCostRows = renderXApiCostRows(args.xApiUsage);
-  const stageRows = renderStageRows(args.telemetry);
-  const decisionRows = renderDecisionRows(args.telemetry);
-  const scoreRows = renderScoreRows(args.telemetry);
   const accountRows = renderAccountRows(args.telemetry);
   const mediaRows = renderMediaRows(args.telemetry);
   const errorRows = renderErrorRows(args.telemetry);
@@ -154,10 +151,10 @@ export function renderHome(args: {
           </div>
           <div class="stat">
             <p class="stat-label">SOL spent total</p>
-            <p class="stat-value">${formatSolThreeDecimals(args.launchTotals.sol_spent)}</p>
-            <p class="stat-detail">today ${formatSolThreeDecimals(args.todayCounter.sol_spent)} SOL${
+            <p class="stat-value">${formatSolTwoDecimals(args.launchTotals.sol_spent)}</p>
+            <p class="stat-detail">today ${formatSolTwoDecimals(args.todayCounter.sol_spent)} SOL${
               args.reservedSolPending && args.reservedSolPending > 0
-                ? ` (+${formatSolThreeDecimals(args.reservedSolPending)} reserved)`
+                ? ` (+${formatSolTwoDecimals(args.reservedSolPending)} reserved)`
                 : ""
             }</p>
           </div>
@@ -170,42 +167,6 @@ export function renderHome(args: {
             <p class="stat-label">Queue</p>
             <p class="stat-value">${args.telemetry.pending.queued}</p>
             <p class="stat-detail">${args.telemetry.pending.locked} locked</p>
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <div class="section section-tight">
-      <h2 class="h2" id="pipeline">Pipeline health</h2>
-      <div class="table-card">
-        <div class="table-scroll">
-          <table>
-            <thead><tr>
-              <th>Stage</th><th class="col-num">Runs</th><th class="col-num">Errors</th><th class="col-num">Avg ms</th><th class="col-num">Max ms</th>
-            </tr></thead>
-            <tbody>${stageRows || `<tr><td colspan="5" class="empty">No pipeline events yet.</td></tr>`}</tbody>
-          </table>
-        </div>
-      </div>
-    </div>
-
-    <div class="section section-tight">
-      <h2 class="h2" id="calibration">Classifier telemetry</h2>
-      <div class="split-tables">
-        <div class="table-card">
-          <div class="table-scroll">
-            <table>
-              <thead><tr><th>Decision</th><th class="col-num">Count</th></tr></thead>
-              <tbody>${decisionRows || `<tr><td colspan="2" class="empty">No decisions yet.</td></tr>`}</tbody>
-            </table>
-          </div>
-        </div>
-        <div class="table-card">
-          <div class="table-scroll">
-            <table>
-              <thead><tr><th>Score bucket</th><th class="col-num">Count</th></tr></thead>
-              <tbody>${scoreRows || `<tr><td colspan="2" class="empty">No scores yet.</td></tr>`}</tbody>
-            </table>
           </div>
         </div>
       </div>
@@ -229,20 +190,6 @@ export function renderHome(args: {
               <tbody>${mediaRows || `<tr><td colspan="4" class="empty">No media stats yet.</td></tr>`}</tbody>
             </table>
           </div>
-        </div>
-      </div>
-    </div>
-
-    <div class="section section-tight">
-      <h2 class="h2" id="errors">Recent errors and pauses</h2>
-      <div class="table-card">
-        <div class="table-scroll">
-          <table>
-            <thead><tr>
-              <th>Stage</th><th>Status</th><th>When</th><th>Detail</th>
-            </tr></thead>
-            <tbody>${errorRows || `<tr><td colspan="4" class="empty">No recent errors.</td></tr>`}</tbody>
-          </table>
         </div>
       </div>
     </div>
@@ -310,6 +257,20 @@ export function renderHome(args: {
           otherValue: args.launchesPage,
           anchor: "tweets",
         })}
+      </div>
+    </div>
+
+    <div class="section section-tight">
+      <h2 class="h2" id="errors">Recent errors and pauses</h2>
+      <div class="table-card">
+        <div class="table-scroll">
+          <table>
+            <thead><tr>
+              <th>Stage</th><th>Status</th><th>When</th><th>Detail</th>
+            </tr></thead>
+            <tbody>${errorRows || `<tr><td colspan="4" class="empty">No recent errors.</td></tr>`}</tbody>
+          </table>
+        </div>
       </div>
     </div>
   `;
@@ -457,42 +418,6 @@ function renderXApiCostRows(summary: XApiUsageSummary): string {
   }).join("");
 }
 
-function renderStageRows(telemetry: DashboardTelemetry): string {
-  return telemetry.stageMetrics
-    .map(
-      (row) => `<tr>
-        <td>${esc(row.stage)}</td>
-        <td class="col-num">${row.runs}</td>
-        <td class="col-num">${row.errors}</td>
-        <td class="col-num">${Math.round(row.avg_duration_ms)}</td>
-        <td class="col-num">${Math.round(row.max_duration_ms)}</td>
-      </tr>`,
-    )
-    .join("");
-}
-
-function renderDecisionRows(telemetry: DashboardTelemetry): string {
-  return telemetry.decisionCounts
-    .map(
-      (row) => `<tr>
-        <td><span class="pill ${isDecision(row.decision) ? pillClass(row.decision) : ""}">${esc(row.decision)}</span></td>
-        <td class="col-num">${row.count}</td>
-      </tr>`,
-    )
-    .join("");
-}
-
-function renderScoreRows(telemetry: DashboardTelemetry): string {
-  return telemetry.scoreBuckets
-    .map(
-      (row) => `<tr>
-        <td>${esc(row.bucket)}</td>
-        <td class="col-num">${row.count}</td>
-      </tr>`,
-    )
-    .join("");
-}
-
 function renderAccountRows(telemetry: DashboardTelemetry): string {
   return telemetry.accountStats
     .map(
@@ -530,17 +455,6 @@ function renderErrorRows(telemetry: DashboardTelemetry): string {
       </tr>`,
     )
     .join("");
-}
-
-function isDecision(value: string): value is Decision {
-  return [
-    "launched",
-    "skipped_low_score",
-    "skipped_safety",
-    "skipped_validation",
-    "skipped_error",
-    "dry_run",
-  ].includes(value);
 }
 
 function findUsageLine(
@@ -599,10 +513,6 @@ export function formatSol(sol: number): string {
 
 export function formatSolTwoDecimals(sol: number): string {
   return formatSolFixed(sol, 2);
-}
-
-export function formatSolThreeDecimals(sol: number): string {
-  return formatSolFixed(sol, 3);
 }
 
 function formatSolFixed(sol: number, fractionDigits: number): string {
