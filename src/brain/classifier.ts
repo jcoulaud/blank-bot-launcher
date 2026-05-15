@@ -19,6 +19,7 @@ const VisualAssessmentSchema = z.enum([
 const DisqualifierSchema = z.enum([
   "announcement_or_promo",
   "app_or_ai_screenshot",
+  "author_rejects_premise",
   "image_text_extraction_only",
   "informational_or_technical",
   "market_data_or_chart",

@@ -78,4 +78,24 @@ describe("passesThreshold", () => {
       }),
     ).toThrow();
   });
+
+  it("rejects when the author rejects the very premise a launch would represent", () => {
+    const c = classification({
+      confidence: 0.92,
+      launchableMeme: false,
+      memeSource: "none",
+      disqualifiers: ["author_rejects_premise", "no_self_contained_joke"],
+      reason: "principal mocking memecoin anointment; launching is the joke at the bot's expense",
+    });
+    expect(passesThreshold(c, 0.85)).toBe(false);
+  });
+
+  it("accepts author_rejects_premise as a valid disqualifier in the schema", () => {
+    expect(() =>
+      ClassificationSchema.parse({
+        ...classification(),
+        disqualifiers: ["author_rejects_premise"],
+      }),
+    ).not.toThrow();
+  });
 });
