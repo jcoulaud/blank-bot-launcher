@@ -213,8 +213,10 @@ describe("prepareImage dispatch", () => {
     expect(text).toContain("Single tangible object");
     expect(text).toContain("memecoin token avatar");
     expect(text).toContain("Solana memecoin culture");
-    expect(text).toContain("recognizable cultural anchor");
-    expect(text).toContain("Literal animal/object mascots are not enough");
+    expect(text).toContain("recognizable cultural artifact");
+    expect(text).toContain("Anti-literal symbolism rule");
+    expect(text).toContain("Pokemon card frame");
+    expect(text).toContain("Phrygian/Liberty cap");
     expect(text).toContain("Crypto hardware is a prop, not the anchor");
     expect(text).toContain("hoodie patches");
     expect(text).toContain("ticker MUST NOT appear");

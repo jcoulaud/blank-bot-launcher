@@ -109,6 +109,12 @@ const BLOCKED_GENERIC_IMAGE_PROMPT_PATTERNS = [
   /\bcartoon meme illustration\b/i,
   /\bbold colors?\b.*\bsimple shapes?\b/i,
   /^\s*(doge|pepe|wojak|chad|meme|token|coin|logo|icon)\s*$/i,
+  // Anti-literal-symbolism: anchors that are just a direct icon of the words read as AI slop.
+  // The anchor must be a specific cultural artifact, not a generic symbolic visualization.
+  /Anchor\s*:[^.]*\bcrossed[-\s]?out\b/i,
+  /Anchor\s*:[^.]*\b(?:simple|generic|basic|minimalist|clean|abstract)\s+(?:sticker|illustration|icon|emblem|design|symbol|graphic|logo|mark|art)\b/i,
+  /Anchor\s*:[^.]*\bprotest\s+sticker\b/i,
+  /Anchor\s*:[^.]*\bconcept\s+(?:art|illustration|piece)\b/i,
 ] as const;
 const AI_MODEL_AUTHOR_HANDLES = new Set(["sama", "openai", "gdb"]);
 const AI_MODEL_NAMING_WORD_RE = /\b(name|named|naming|call|called)\b/i;
@@ -120,7 +126,7 @@ const CRYPTO_CONTEXT_RE =
 const CRYPTO_VISUAL_CUE_RE =
   /\b(solana|validator|validators|genesis\s+node|node|nodes|cluster|bootstrap|alpenglow|mainnet|devnet|testnet|staking|stake|stakepool|pool|server|rack|hardware|datacenter|ledger|wallet|block|on-?chain|chain|dex|raydium|jupiter|jito|pump\.?\s*fun|crypto\s+twitter|ct|degen|memecoin|bonk|bome|slerf|mew|candle|candles)\b/i;
 const MEME_CULTURE_ANCHOR_RE =
-  /\b(wojak|feels[-\s]?guy|brainlet|doomer|bloomer|zoomer|boomer|soyjak|npc|chad|giga\s?chad|yes[-\s]?chad|nordic[-\s]?gamer|apu|pepe|doge|4chan|reddit|matrix|morpheus|sopranos|lotr|lord\s+of\s+the\s+rings|star\s+wars|anakin|akira|gta|office\s+space|renaissance|greek\s+statue|classical\s+art|casio|tamagotchi|nokia|clippy|pit\s+viper|pit\s+vipers)\b/i;
+  /\b(wojak|feels[-\s]?guy|brainlet|doomer|bloomer|zoomer|boomer|soyjak|npc|chad|giga\s?chad|yes[-\s]?chad|nordic[-\s]?gamer|apu|pepe|doge|4chan|reddit|matrix|morpheus|sopranos|lotr|lord\s+of\s+the\s+rings|star\s+wars|anakin|akira|gta|office\s+space|breaking\s+bad|dune|interstellar|pulp\s+fiction|renaissance|greek\s+statue|classical\s+art|caravaggio|vermeer|hokusai|casio|tamagotchi|nokia|clippy|pit\s+viper|pit\s+vipers|blackberry|razr|stanley\s+cup|ikea\s+bag|pokemon\s+card|magic\s+the\s+gathering|mtg\s+card|yu-?gi-?oh|topps|garbage\s+pail\s+kids|allen\s+(?:and|&)\s+ginter|baseball\s+card|trading\s+card|tcg|silver[-\s]?age|ec\s+comics|lichtenstein|tintin|action\s+comics|comic[-\s]?cover|sports\s+illustrated|si\s+cover|championship\s+trophy|jersey|national\s+enquirer|tabloid|time\s+magazine|people\s+(?:cover|magazine)|chyron|joy\s+division|unknown\s+pleasures|velvet\s+underground|nevermind|dark\s+side\s+of\s+the\s+moon|abbey\s+road|album\s+art|festival\s+poster|mixtape|zine\s+cover|phrygian|liberty\s+cap|sans-?culottes?|tricolor|cockade|guillotine|boston\s+tea\s+party|washington|we\s+the\s+people|statue\s+of\s+liberty|don'?t\s+tread\s+on\s+me|gadsden|protest\s+sign|cardboard\s+sign|anonymous\s+mask|guy\s+fawkes|banksy|they\s+live|altarpiece|chalkboard|textbook\s+diagram)\b/i;
 
 export type ValidationFailure = {
   field: keyof Metadata | "imageStrategy_consistency";

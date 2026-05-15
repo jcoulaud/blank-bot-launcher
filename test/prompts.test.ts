@@ -90,6 +90,21 @@ describe("buildClassifierPrompt", () => {
     expect(prompt).toContain('Use "none" when the only launchable material is in the quoted tweet');
     expect(prompt).not.toContain('quoted_tweet"');
   });
+
+  it("rejects when the author explicitly mocks the action a launch would represent", () => {
+    const prompt = buildClassifierPrompt(sampleTweet);
+    expect(prompt).toContain("author_rejects_premise");
+    expect(prompt).toContain("Author rejects the premise");
+    expect(prompt).toContain("#nokings");
+    expect(prompt).toContain("toly");
+    expect(prompt).toContain("would BE the joke at the bot's expense");
+  });
+
+  it("rejects hashtag-only, single-word, and interjection-only quote reactions", () => {
+    const prompt = buildClassifierPrompt(sampleTweet);
+    expect(prompt).toContain("hashtag, a single word, an interjection");
+    expect(prompt).toContain("the source must MAKE the meme, not point at one");
+  });
 });
 
 describe("buildMetadataPrompt", () => {
@@ -245,6 +260,72 @@ describe("buildMetadataPrompt", () => {
     expect(prompt).toContain("graphic-emblem");
     expect(prompt).toContain("studio-photo");
     expect(prompt).toContain("do not default to wojak");
+  });
+
+  it("teaches political/civics/protest anchors as a first-class anchor lane", () => {
+    const prompt = buildMetadataPrompt({
+      tweet: sampleTweet,
+      classification: sampleClassification,
+    });
+
+    expect(prompt).toContain("Politics / civics / protest");
+    expect(prompt).toContain("Phrygian");
+    expect(prompt).toContain("Liberty cap");
+    expect(prompt).toContain("sans-culottes");
+    expect(prompt).toContain("Anonymous");
+    expect(prompt).toContain("Guy Fawkes");
+    expect(prompt).toContain("NEVER a generic crossed-out icon");
+  });
+
+  it("teaches TCG / collection-card and other non-crypto anchor lanes", () => {
+    const prompt = buildMetadataPrompt({
+      tweet: sampleTweet,
+      classification: sampleClassification,
+    });
+
+    expect(prompt).toContain("Trading-card / TCG");
+    expect(prompt).toContain("Pokemon card frame");
+    expect(prompt).toContain("Magic-the-Gathering");
+    expect(prompt).toContain("Topps");
+    expect(prompt).toContain("Sports / fandom");
+    expect(prompt).toContain("Music / album / subculture");
+    expect(prompt).toContain("News cycle / tabloid");
+    expect(prompt).toContain("Religion / philosophy / academia");
+  });
+
+  it("explicitly bans literal-direct-symbol anchors as AI slop", () => {
+    const prompt = buildMetadataPrompt({
+      tweet: sampleTweet,
+      classification: sampleClassification,
+    });
+
+    expect(prompt).toContain("Anti-literal symbolism rule");
+    expect(prompt).toContain("crossed-out crown");
+    expect(prompt).toContain("literal moon");
+    expect(prompt).toContain("AI slop");
+  });
+
+  it("includes a political-anchor worked example with a specific cultural artifact, not a generic symbol", () => {
+    const prompt = buildMetadataPrompt({
+      tweet: sampleTweet,
+      classification: sampleClassification,
+    });
+
+    expect(prompt).toContain("trenches voted me in");
+    expect(prompt).toContain("Phrygian/Liberty cap");
+    expect(prompt).toContain("Sans-Culottes silhouette");
+    expect(prompt).toContain("tricolor");
+  });
+
+  it("includes a TCG/Pokemon-card worked example demonstrating the frame-as-anchor pattern", () => {
+    const prompt = buildMetadataPrompt({
+      tweet: sampleTweet,
+      classification: sampleClassification,
+    });
+
+    expect(prompt).toContain("Charizard of L2s");
+    expect(prompt).toContain("Pokemon trading-card frame");
+    expect(prompt).toContain("HP corner");
   });
 
   it("marks quoted-tweet media as available for metadata image strategy", () => {

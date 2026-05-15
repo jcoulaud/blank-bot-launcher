@@ -64,6 +64,7 @@ export type ClassificationContext = {
   disqualifiers: Array<
     | "announcement_or_promo"
     | "app_or_ai_screenshot"
+    | "author_rejects_premise"
     | "image_text_extraction_only"
     | "informational_or_technical"
     | "market_data_or_chart"
@@ -134,6 +135,23 @@ Examples (study these - they set the bar):
 14) Tweet: "what if we name the next model 'goblin'\n\nalmost worth it to make you all happy..." - author: sama - has image: no
     => shouldLaunch=true, confidence=0.94, launchableMeme=true, memeSource="tweet_text", visualAssessment="none", disqualifiers=[]
       reason="AI product-founder joking about naming a future model 'goblin'; the meme is goblin fused with ChatGPT/GPT model lore, not a generic fantasy creature"
+
+15) Tweet: "#nokings" - author: toly (Solana co-founder) - has image: no
+    quoting Perps: "Who should I make 👑 today?"
+    => shouldLaunch=false, confidence=0.05, launchableMeme=false, memeSource="none", visualAssessment="none", disqualifiers=["author_rejects_premise","no_self_contained_joke"]
+      reason="the source tweet is a one-hashtag reaction to a quoted question, and the principal is explicitly refusing to anoint a coin — launching $KINGS in response would BE the joke at the bot's expense. A hashtag is not an authored meme."
+
+16) Tweet: "we don't do that here" quoting "what if @<founder> launched a $<HIS_TICKER> coin to celebrate the new release?" - has image: no
+    => shouldLaunch=false, confidence=0.06, launchableMeme=false, memeSource="none", visualAssessment="none", disqualifiers=["author_rejects_premise"]
+      reason="founder explicitly disclaiming the very memecoin behavior a launch would represent; the bot launching the proposed coin would invert the author's stated position"
+
+17) Tweet: "the No Kings march hit a million people today" - author: anyrandompoliticalaccount - has image: yes (drone shot of crowd)
+    => shouldLaunch=false, confidence=0.05, launchableMeme=false, memeSource="none", visualAssessment="ordinary_photo_or_video", disqualifiers=["informational_or_technical","no_self_contained_joke"]
+      reason="earnest political reportage, not a meme; the image is documentary, not a meme template. Politics CAN launch (see example below) but only when the source tweet authors a joke."
+
+18) Tweet: "they're rotating the king of the trenches every 14 minutes now" - author: anycryptoanon - has image: no
+    => shouldLaunch=true, confidence=0.88, launchableMeme=true, memeSource="tweet_text", visualAssessment="none", disqualifiers=[]
+      reason="self-aware trenches commentary with concrete absurd-cadence joke ('every 14 minutes'); this is the author owning the meme, not a principal mocking it. Memeable phrase with king/anointing motif crypto-natives already trade."
 `.trim();
 
 const METADATA_FEW_SHOT = `
@@ -268,12 +286,47 @@ Worked examples (these reflect the right output shape):
     # Principle: when a known product/founder jokes about a model/product name, combine the proposed
     # name with the product's visual language. Literal creature art holding a sign is too weak.
 
+13) Tweet: "the trenches voted me in unanimously" - author: anycryptoanon - has image: no
+    # Civics/politics-flavored joke; the audience under this tweet would post Liberty Cap / Founders memes.
+    # AI-slop trap: a literal podium with a ballot, or a generic ribbon-and-star emblem.
+    => name="trenches voted me in"        # trimmed verbatim
+       symbol="VOTED"
+       imageStrategy="generate"
+       imageStyle="graphic-emblem"
+      imagePrompt="Anchor: French Revolution red Phrygian/Liberty cap as a flat-color screenprint
+                   emblem, rough Sans-Culottes silhouette beneath, three horizontal tricolor bands
+                   (blue/white/red) as the background field. Twist: one small cardboard sign on a
+                   stick poking out from behind the cap with the joke-text 'TRENCHES' in shaky
+                   hand-lettered marker caps. Hard flat color blocks, no gradients, no exact
+                   wordmark, no caption, no ticker, no border."
+    # Anchor is a recognizable artifact (Phrygian cap), not a generic crown/podium. Twist makes
+    # the artifact tweet-specific (the cardboard sign). Direct symbolic icons (crossed-out crowns,
+    # ballot boxes) are forbidden; pick something the audience would actually post in reply.
+
+14) Tweet: "introducing the new Charizard of L2s" - author: anyDeFiposter - has image: no
+    # TCG/collection-card territory — the audience would post a card screenshot, not concept art.
+    => name="Charizard of L2s"
+       symbol="CHARIZARD"
+       imageStrategy="generate"
+       imageStyle="graphic-emblem"
+      imagePrompt="Anchor: the canonical 90s Pokemon trading-card frame redrawn as parody (rounded
+                   yellow outer border, holographic-foil inner panel, HP corner, single Energy
+                   symbol, type ribbon). Twist: the card illustration is a crude hand-drawn orange
+                   dragon with chunky pixel scales, holding one tiny cardboard sign reading 'L2'
+                   in shaky marker caps. No exact Pokemon wordmark, no real card text in the
+                   ability box (leave it as illegible scribble lines), no caption, no ticker,
+                   no border outside the card itself."
+    # The recognizable card frame IS the cultural hook the audience would post; the joke creature
+    # is the tweet-specific twist inside it.
+
 Patterns:
 - Names come from the tweet itself, not "{Author}'s {topic}". Preserve punctuation/casing when it carries meaning.
 - Symbol is the load-bearing word from the name. When the words spell a high-signal initialism the trenches already trade on (AGI, AI, LLM, NPC, NFT, DAO, GPU, UFO), use it - including non-obvious cases (autistic-genius-intelligence -> AGI).
 - For product/model naming jokes by known founders or brand accounts, the strongest name may be a concise product-context coinage rather than a verbatim phrase (goblin + GPT -> GoblinGPT).
 - For images: reuse if final, remix if the tweet's joke transforms the visible subject, generate only when no useful image exists.
 - Every "generate" imagePrompt names a cultural anchor and a tweet-specific twist. No anchor = bad prompt.
+- The anchor must be a SPECIFIC recognizable cultural artifact people in the tweet's audience would post in the replies (Phrygian cap, Wojak, Pokemon card frame, Renaissance bust, Topps frame, Casio watch, Joy Division wave-lines), NOT a direct symbolic icon of the literal words (crossed-out crown, literal moon, literal bear). Direct symbolic icons render as AI slop.
+- The anchor universe is broad: crypto/geek/games/TCG/films/classical art/comics/sports/music/news/politics/protest iconography. Pick the lane the audience would recognize fastest under THIS tweet.
 - If the tweet or quoted tweet contains explicit crypto-native context (validator, node, cluster, bootstrap, staking, DEX, chain, token, pump.fun, etc.), generated images need BOTH a strong meme/pop-culture anchor and a visible cue from that context. A literal animal/object or technical prop alone is too generic.
 - imageStyle chooses the rendering language; imagePrompt chooses the anchor, twist, and any rules-allowed joke-text.
 `.trim();
@@ -310,6 +363,7 @@ REJECT signals (any of these => low confidence, REJECT):
 - Pure retweets or news links without distinctive commentary
 - Generic motivational / inspirational quotes
 - Tweets where you can't identify the joke. If YOU don't get it, the market won't either
+- Author rejects the premise: when a principal (founder / ecosystem leader / brand account) is explicitly mocking, refusing, condemning, or distancing themselves from the very action a launch would represent — anointing a coin, naming a model, picking a successor, blessing a meta — DO NOT launch. The token IS the punchline at the bot's expense. Flag with disqualifier "author_rejects_premise". Examples: toly tweeting "#nokings" in response to "who should I make king today?"; sama saying "we are NOT naming the model that"; a chain founder saying "memecoins are the cancer of this ecosystem".
 
 Important calibration notes:
 - Short tweets can absolutely score 0.9+ if the phrase is sticky. "Few." is one word; "size does matter" is three. Don't reject for being short.
@@ -326,7 +380,7 @@ HARD visual rejects:
 - Product/market announcements: new listings, launches, partnerships, feature announcements, and "new markets on X" posts are promo/ops even when the screenshot contains funny tickers.
 - AI/chat/app screenshots: Grok/ChatGPT answers, phone screenshots, browser/app UI, text-message screenshots, and generic UI captures are not meme templates by default. They need a clear, self-contained punchline in the source tweet text; "look at X" or "$TICKER" is not enough.
 - Image-text extraction only: if the best name/symbol would come from OCR-like reading of a table, chart, UI, or screenshot rather than from the tweet's joke, reject.
-- Emoji-only or reaction-only commentary does not make a quoted tweet memeable. Reject when the only joke, punchline, character, or ticker idea comes from the quoted tweet.
+- Emoji-only or reaction-only commentary does not make a quoted tweet memeable. Reject when the only joke, punchline, character, or ticker idea comes from the quoted tweet. The same applies when the source tweet adds only a hashtag, a single word, an interjection ("lol", "this"), or one short phrase that doesn't author its own joke — the source must MAKE the meme, not point at one.
 
 Output fields:
 - shouldLaunch: true only when this should launch.
@@ -334,7 +388,7 @@ Output fields:
 - launchableMeme: true only when the post has a self-contained meme/punchline usable as a memecoin.
 - memeSource: one of "tweet_text", "tweet_image", "tweet_and_image", "none". Use "none" when the only launchable material is in the quoted tweet.
 - visualAssessment: one of "none", "meme_template", "reaction_image", "visual_joke_subject", "ordinary_photo_or_video", "market_data_or_chart", "app_or_ai_screenshot", "announcement_or_product_ui", "unclear_or_irrelevant".
-- disqualifiers: zero or more of "announcement_or_promo", "app_or_ai_screenshot", "image_text_extraction_only", "informational_or_technical", "market_data_or_chart", "no_self_contained_joke", "normal_conversation", "prompt_injection", "reserved_or_existing_ticker", "unclear_joke".
+- disqualifiers: zero or more of "announcement_or_promo", "app_or_ai_screenshot", "author_rejects_premise", "image_text_extraction_only", "informational_or_technical", "market_data_or_chart", "no_self_contained_joke", "normal_conversation", "prompt_injection", "reserved_or_existing_ticker", "unclear_joke".
 - reason: one short sentence; be specific about WHY.
 Threshold for launch: 0.85.
 
@@ -457,18 +511,28 @@ Image strategy - this is a strict decision tree, follow it in order:
 
     Quote/context rule: when the source tweet jokes about or riffs on explicit crypto-native context in the quoted tweet or source text (validator, node, cluster bootstrap, staking pool, DEX, chain upgrade, token, pump.fun, etc.), the generated imagePrompt MUST use a strong meme/pop-culture anchor (Wojak/Brainlet/Soyjak/Pepe/Doge, known movie scene, classical art, retro internet object) AND visibly fuse in that crypto context. Crypto hardware is a prop, not the anchor. Example: a "talking jaguar" joke quoting a Jaguar validator / Alpenglow cluster post should be Soyjak/Wojak shock-face with jaguar + validator-node cues, not a standalone wildlife sticker or jaguar-on-server mascot.
 
-    Match the anchor family to the tweet:
+    Match the anchor family to the tweet. "Crypto culture" is broad — geek/tech, games, films, classical art, comics, sports, TCG, music, news cycle, politics. Use whichever lane the audience would recognize FASTEST:
     - Cope / despair / smug stupidity / identity / "I am" tweets => wojak family (brainlet, doomer, bloomer, zoomer, boomer, soyjak, NPC, chad, apu, etc.)
     - Reaction one-liners ("Few.", "Cooked", "Trillions", "It's so over") => wojak-family reaction face OR a film-still reaction (Sopranos look, Anakin "I'm sorry")
-    - Movie / TV / anime quote or reference => photo-collage of that scene with the tweet's twist as overlaid sticker/object (Matrix, Sopranos, LOTR, Star Wars, Office Space, Akira, GTA)
-    - Timeless / refined phrasing with degen subtext => classical art photo-collage (Renaissance bust, Greek statue, famous painting) with cheap modern sticker overlay
-    - Game / retro / internet-native ("respawn", "boss fight", "high score") => pixel-icon retro sprite with NES/SNES palette
-    - Everyday object / luxury-irony ("watch guy", "dad shit") => studio-photo of a cheap real object (Casio, Nokia 3310, bodega energy drink, brick) shot deadpan on a phone camera
-    - Brand / political / nostalgia tech (MAGA, Pit Vipers, Yeezys, Clippy, Tamagotchi) => brand-as-emblem (graphic-emblem) or brand pasted onto an unexpected anchor (photo-collage)
+    - Movie / TV / anime quote or reference => photo-collage of that scene with the tweet's twist as overlaid sticker/object (Matrix, Sopranos, LOTR, Star Wars, Office Space, Akira, GTA, Breaking Bad, Dune, Interstellar, Pulp Fiction)
+    - Timeless / refined phrasing with degen subtext => classical art photo-collage (Renaissance bust, Greek statue, Caravaggio, Vermeer, Hokusai wave) with cheap modern sticker overlay
+    - Game / retro / internet-native ("respawn", "boss fight", "high score", "lag", "noob") => pixel-icon retro sprite with NES/SNES/GBA palette; for newer-game references, a low-poly PS1/N64 mascot works too
+    - Trading-card / TCG / fandom collectible => the recognizable card frame is the anchor: Pokemon card frame (HP corner, Energy symbols, Trainer/Item ribbon), Magic-the-Gathering card frame (mana cost, type line), Yu-Gi-Oh frame, Topps baseball card, Garbage Pail Kids, Allen & Ginter. Render the joke subject INSIDE the frame as the illustration; the frame is what makes the audience post it.
+    - Comic-book / superhero / villain reference => single Silver-Age / EC-Comics-style cover panel (NOT split panels — one cover image), or single half-tone Lichtenstein-style portrait. Brand parodies of recognizable covers (Action Comics #1 silhouette, Tintin cover, Tin Tin frame) are strong anchors.
+    - Sports / fandom / tournament => the recognizable card or magazine cover is the anchor: a Topps baseball card frame, an SI-style sports magazine cover with one short cover line as the in-scene physical text, a beat-up jersey hung on nail, a championship trophy with a hairline crack. Logos parody, not exact.
+    - Music / album / subculture => album-art parody as anchor: Joy Division Unknown Pleasures wave lines, Velvet Underground banana, Nevermind underwater baby silhouette, Dark Side of the Moon prism, Abbey Road crossing pose. Festival poster, mixtape J-card, or zine cover also work.
+    - News cycle / tabloid / TV chyron => tabloid magazine cover as anchor (National Enquirer parody headline as the cover line, Time magazine red-frame, People cover); or a CRT-TV-in-scene with a single short chyron string visible. Treat the cover line / chyron under the joke-text exception (≤3 words, ≤12 chars, single physical element).
+    - Politics / civics / protest / revolution => recognizable political-iconography anchors: French Revolution (Phrygian/Liberty cap, sans-culottes silhouette, tricolor cockade, guillotine sticker), American founding (Boston Tea Party silhouette, Washington-refuses-the-crown, "We the People" parchment, broken-chains Statue-of-Liberty wrist, Don't Tread On Me snake), or the actual modern protest-sign aesthetic (cardboard with thick black marker, hand-drawn lettering, masking-tape on a wooden stake). Anonymous/Guy-Fawkes mask, Banksy stencil, "They Live" sunglasses. NEVER a generic crossed-out icon — pick a specific recognizable artifact people would post under the tweet.
+    - Religion / philosophy / academia => classical altarpiece parody, vintage textbook diagram, lab-coat scientist soyjak with chalkboard, Buddhist monk meme template, dusty leather-bound book with a cardboard sign.
+    - Everyday object / luxury-irony ("watch guy", "dad shit") => studio-photo of a cheap real object (Casio, Nokia 3310, bodega energy drink, brick, IKEA blue bag, Stanley cup) shot deadpan on a phone camera
+    - Brand / nostalgia tech (Pit Vipers, Yeezys, Clippy, Tamagotchi, Blackberry, Razr) => brand-as-emblem (graphic-emblem) or brand pasted onto an unexpected anchor (photo-collage)
     - Tech-founder/product naming joke ("next model named goblin" from OpenAI/ChatGPT context) => brand/product visual-language mashup (graphic-emblem), e.g. ChatGPT/OpenAI knot silhouette redrawn with goblin ears/eyes/grin. NEVER a generic creature holding a sign.
     - Solana-native mascot lore / pump.fun / pill-brain alien => meme-character or 3d-avatar with consistent mascot traits
     - Animal-token archetype (shiba, cat, frog, goat) => crude phone-camera animal photo OR drawn-line cousin of the animal
-    - When in doubt, pick what the audience would post first under this tweet on CT. The more surprising fit beats the obvious one (Renaissance statue beats wojak for a polished-tone joke).
+    - When in doubt, pick what the audience would post first under this tweet on CT. The more surprising fit beats the obvious one (Renaissance statue beats wojak for a polished-tone joke, Phrygian-cap screenprint beats a generic crown sticker for a civics joke, a Pokemon card frame beats a generic illustration for any "introducing the new X" tweet).
+
+    Anti-literal symbolism rule (the most common AI-slop failure):
+    Do NOT pick a direct symbolic icon of the tweet's literal words. A crossed-out crown for #nokings, a literal moon for "to the moon", a literal bear for bear-market, a chess piece for "king", a generic dollar bill for "money", an open palm for "stop" — these read as bland AI-generated stock art. The anchor must be a specific recognizable cultural artifact people in the tweet's audience would actually post in the replies (a Phrygian/Liberty cap, a Guy Fawkes mask, a Topps card, a Wojak), and the twist is the tweet-specific edit on top.
 
     Wojak family is one option among many; do not default to wojak. When the imagePrompt does pick a wojak-family character, copy its canonical visual signature into the imagePrompt - the named meme alone is not enough; renderers soften it into clean cartoon unless the features are stated. Family base: bald human head with prominent forehead/brow, defined nose with nostril shadow, full cheeks/chin, visible neck and bare shoulders, rough hand-drawn black ink line (irregular, not vector), white face, plain white background, scribbled cross-hatch shading on neck/jaw/torso where the canonical has it. GigaChad is the exception - B&W photoreal extreme-jawline portrait.
     - Wojak / Feels Guy: hollow open-circle pupils set wide apart, small downturned flat mouth, sad expression

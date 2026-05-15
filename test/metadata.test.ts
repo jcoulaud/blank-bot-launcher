@@ -244,6 +244,57 @@ describe("validateMetadata", () => {
     expect(validateMetadata(meta, jaguarCryptoQuoteTweet())).toBeNull();
   });
 
+  it("rejects literal-direct-symbol anchors as AI slop (crossed-out crown for #nokings)", () => {
+    const meta: Metadata = {
+      ...baseMeta,
+      name: "No Kings",
+      symbol: "KINGS",
+      imageStyle: "graphic-emblem",
+      imagePrompt:
+        "Anchor: two crossed-out golden crowns inside a red prohibition circle as a sticker. Twist: scratched edges and a hand-drawn shadow, plain background, no caption, no ticker.",
+    };
+    const failure = validateMetadata(meta, baseTweet());
+    expect(failure?.field).toBe("imagePrompt");
+    expect(failure?.reason).toMatch(/generic/);
+  });
+
+  it("rejects generic 'simple emblem / sticker / illustration' anchors", () => {
+    for (const slop of [
+      "Anchor: simple emblem of a crown with a slash. Twist: red ink texture, no caption, no ticker.",
+      "Anchor: generic sticker of a monkey on a rocket. Twist: blue gradient backdrop, no caption, no ticker.",
+      "Anchor: abstract concept art of a moon over digital chain. Twist: neon overlays, no caption, no ticker.",
+      "Anchor: minimalist icon of a king's profile. Twist: thin gold line, no caption, no ticker.",
+    ]) {
+      const meta: Metadata = { ...baseMeta, imageStyle: "graphic-emblem", imagePrompt: slop };
+      const failure = validateMetadata(meta, baseTweet());
+      expect(failure?.field).toBe("imagePrompt");
+    }
+  });
+
+  it("accepts a specific political-iconography anchor (Phrygian cap) with a tweet-specific twist", () => {
+    const meta: Metadata = {
+      ...baseMeta,
+      name: "trenches voted me in",
+      symbol: "VOTED",
+      imageStyle: "graphic-emblem",
+      imagePrompt:
+        "Anchor: French Revolution red Phrygian/Liberty cap as a flat-color screenprint emblem, rough Sans-Culottes silhouette beneath, three horizontal tricolor bands as the background field. Twist: one small cardboard sign on a stick poking out from behind the cap with the joke-text 'TRENCHES' in shaky hand-lettered marker caps. No exact wordmark, no caption, no ticker, no border.",
+    };
+    expect(validateMetadata(meta, baseTweet())).toBeNull();
+  });
+
+  it("accepts a TCG card-frame anchor with the joke creature inside it", () => {
+    const meta: Metadata = {
+      ...baseMeta,
+      name: "Charizard of L2s",
+      symbol: "CHARIZARD",
+      imageStyle: "graphic-emblem",
+      imagePrompt:
+        "Anchor: the canonical 90s Pokemon trading-card frame redrawn as parody, rounded yellow outer border, holographic-foil inner panel, HP corner, single Energy symbol, type ribbon. Twist: the card illustration is a crude hand-drawn orange dragon with chunky pixel scales, holding one tiny cardboard sign reading 'L2' in shaky marker caps. No exact wordmark, no real card text in the ability box, no caption, no ticker, no border outside the card itself.",
+    };
+    expect(validateMetadata(meta, baseTweet())).toBeNull();
+  });
+
   it("accepts reuse when tweet has an image", () => {
     const meta: Metadata = { ...baseMeta, imageStrategy: "reuse" };
     delete (meta as { imagePrompt?: string }).imagePrompt;
